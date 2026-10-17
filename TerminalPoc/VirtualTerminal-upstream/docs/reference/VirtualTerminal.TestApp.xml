@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>VirtualTerminal.TestApp</name>
+    </assembly>
+    <members>
+        <member name="T:VirtualTerminal.TestApp.App">
+            <summary>
+            Interaction logic for App.xaml
+            </summary>
+            <summary>
+            App
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.App.#ctor">
+            <summary>
+            Initializes the test application and configures debug tracing to a log file.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.App.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.App.Main">
+            <summary>
+            Application Entry Point.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.TestApp.MainWindow">
+            <summary>
+            MainWindow
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.MainWindow.#ctor">
+            <summary>
+            MainWindow of testing application
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.MainWindow.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.TestApp.SimpleTuiDemoSession">
+            <summary>
+            Minimal demo TUI application running inside a terminal session.
+            Shows a navigable list inside a box; the selected item can be activated with Enter.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.SimpleTuiDemoSession.Render">
+            <summary>
+            Renders the demo TUI, including the bordered menu, selection highlight, and status bar.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TestApp.SimpleTuiDemoSession.OnKey(System.ConsoleKey)">
+            <summary>
+            Handles keyboard input to navigate the menu or activate the selected item.
+            </summary>
+            <param name="key">The key that was pressed.</param>
+        </member>
+    </members>
+</doc>

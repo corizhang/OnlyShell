@@ -1,0 +1,284 @@
+## VirtualTerminal
+
+**VirtualTerminal** is a small, UI-agnostic VT/ANSI terminal engine for .NET with WPF and Avalonia controls.  
+It parses terminal escape sequences into a cross-platform screen buffer and lets you plug in different backends (local ConPTY shell, SSH, or custom sessions) through a single `ITerminalSession` abstraction.
+
+This repository contains:
+
+- **VirtualTerminal** – the core engine: `TerminalDecoder`, `TerminalScreenBuffer`, `TerminalState`, options and session abstractions.
+- **VirtualTerminal.WPF** – `TerminalControl` for WPF (`System.Windows.Controls.Control`).
+- **VirtualTerminal.Avalonia** – `TerminalControl` for Avalonia (`Avalonia.Controls.TemplatedControl`).
+- **VirtualTerminal.CommandLine** – `CommandLineSession`, a ConPTY-backed local shell. (Windows only)
+- **VirtualTerminal.SecureShell** – `SecureShellSession`, an SSH.NET-backed remote shell.
+- **VirtualTerminal.TestApp** – a small WPF demo application
+
+---
+
+## Getting started
+
+### Install / reference projects
+
+1. Add the `VirtualTerminal` project to your solution (or reference the compiled assembly).
+2. Add `VirtualTerminal.WPF` or `VirtualTerminal.Avalonia` depending on your UI stack.
+3. (Optional) Add `VirtualTerminal.CommandLine` and/or `VirtualTerminal.SecureShell` for those backends.
+4. Target `net10.0` (Avalonia / engine) or `net10.0-windows` (WPF backends and test apps).
+
+### Basic XAML setup
+
+#### WPF
+
+```xml
+<Window x:Class="MyApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vt="clr-namespace:VirtualTerminal;assembly=VirtualTerminal.WPF">
+
+    <Grid>
+        <vt:TerminalControl
+            x:Name="Terminal"
+            AllowDirectInput="True"
+            ScrollDownVisible="True"
+            Background="Black"
+            FontFamily="Cascadia Mono"
+            FontSize="14" />
+    </Grid>
+</Window>
+```
+
+#### Avalonia
+
+```xml
+<Window x:Class="MyApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vt="clr-namespace:VirtualTerminal;assembly=VirtualTerminal.Avalonia">
+
+    <vt:TerminalControl 
+        CurrentSession="{Binding Session}"
+        AllowDirectInput="True"
+        Background="Black"
+        FontFamily="Cascadia Mono"
+        TerminalFontSize="14" />
+</Window>
+```
+
+### Basic code-behind: attach a session
+
+Create a session instance and assign it to the control:
+
+```csharp
+using VirtualTerminal;
+
+public partial class MainWindow : Window
+{
+    private CommandLineSession? _session;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        _session = new CommandLineSession(); // defaults to cmd.exe
+        Terminal.Session = _session;         // WPF
+        // Terminal.CurrentSession = _session; // Avalonia
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        _session?.Dispose();
+    }
+}
+```
+
+> **Important**: the control does **not** own or dispose the session. Dispose the session yourself when the window/control is closed.
+
+---
+
+## Core concepts and public API
+
+### `TerminalControl`
+
+The WPF and Avalonia controls render the active `ITerminalSession.Buffer` and forward keyboard input into the session.
+
+**Key properties**
+
+- **`Session`** / **`CurrentSession`** (`DependencyProperty` / `StyledProperty`)
+  - The active `ITerminalSession`.
+- **`AllowDirectInput`** (default `true`)
+  - If `true`, keyboard input is encoded as VT sequences and sent to the session.
+- **`CursorVisible`** (default `true`)
+  - Master cursor visibility (the engine still honors DECTCEM `ESC[?25l/h`).
+- **`CursorRenderer`** (default `DefaultTerminalCursorRenderer`)
+  - Pluggable cursor visual. Derive from `TerminalCursorRenderer` (one per framework, in the
+    `VirtualTerminal.Cursors` namespace of `VirtualTerminal.WPF` / `VirtualTerminal.Avalonia`)
+    and override `MoveTo`/`Render`. The control drives the renderer: it calls `MoveTo` with the
+    target cell rect whenever the cursor position changes and `Render` on every render pass, with
+    the current state in `IsCursorVisible` (focus/DECTCEM/master switch) and `CursorBlinkMode`
+    (DEC ?12). Blinking and animation are the renderer's own business — the default draws a thin
+    bar that snaps to the target cell and blinks on its own private 530ms timer; a custom
+    renderer can run its own clock (start/stop it in `Attach`/`Detach`), drive interpolation
+    from `MoveTo`, or draw a steady cursor. DECSCUSR (`ESC[ Ps SP q`) and OSC 12 (cursor color)
+    are parsed but ignored by the engine — cursor appearance is entirely the renderer's job.
+- **`ScrollDownVisible`** (default `true`)
+  - Shows a floating indicator when scrolled back in history.
+- **`Background`** / **`Foreground`**
+  - Default terminal colors.
+- **`FontFamily`** / **`FontSize`** (WPF) or **`TerminalFontFamily`** / **`TerminalFontSize`** (Avalonia)
+  - Rendering font.
+- **`LineHeight`**
+  - Line height multiplier.
+- **`ScrollbackLines`**
+  - Maximum number of scrollback lines to retain.
+- **`AutoScrolling`** (read-only)
+  - `true` when the viewport is pinned to the live bottom.
+
+**Key behavior**
+
+- Renders the active screen buffer using glyph-based text rendering.
+- Handles `PreviewKeyDown` / `PreviewTextInput` when `AllowDirectInput == true`.
+- Mouse wheel scrolls through scrollback.
+- `Ctrl + Mouse Wheel` zooms the terminal font.
+
+### `ITerminalSession`
+
+The minimal interface any backend must implement.
+
+**Members**
+
+- **`event EventHandler? BufferUpdated`** – raise when the buffer changes and the UI should repaint.
+- **`TerminalScreenBuffer Buffer { get; }`** – the screen buffer.
+- **`ITerminalDecoder Decoder { get; }`** – the VT decoder that writes into `Buffer`.
+- **`Encoding InputEncoding { get; }`** / **`Encoding OutputEncoding { get; }`**.
+- **`string Title { get; }`** – logical title of the session.
+- **`void Resize(ushort columns, ushort rows)`** – called when the control is resized.
+- **`void Write(ReadOnlySpan<byte> data)`** – writes input bytes to the backend.
+- **`int Read(Span<byte> buffer)`** / **`byte[] ReadAll()`** – reads response data from the backend (e.g. replies to DA/DSR queries).
+
+### `TerminalSession`
+
+Recommended abstract base class in `VirtualTerminal.Session`.
+
+It owns a `TerminalDecoder` and a `TerminalScreenBuffer`, wires `BufferUpdated`, and provides:
+
+- **`void Resize(ushort columns, ushort rows)`** – resizes the local decoder buffer.
+- **`void Write(ReadOnlySpan<byte> data)`** – writes to the local decoder and notifies the UI.
+- **`protected void NotifyBufferUpdated()`** – raises `BufferUpdated`.
+- **`IDisposable`** pattern.
+
+Derived sessions override `Write` and `Resize` to talk to the actual backend.
+
+### `TerminalDecoder`
+
+Parses incoming VT/ANSI byte streams and applies them to a `TerminalScreenBuffer`.  
+Key method: **`void Write(ReadOnlySpan<byte> data)`**.
+
+### `TerminalScreenBuffer`
+
+The engine screen buffer. It owns:
+
+- the primary and alternate screen grids,
+- the scrollback ring,
+- tab stops,
+- the scroll region,
+- dirty-row tracking.
+
+Public API includes `Rows`, `Columns`, `GetRow(int)`, `GetScrollback()`, `Resize(...)`, `ScrollbackCount`, `HasDirtyRows`, `MarkRowClean`, `SyncRoot`, etc.
+
+---
+
+## Addons
+
+- **VirtualTerminal.CommandLine** – `CommandLineSession` for local ConPTY shells (`cmd.exe`, PowerShell, etc.).
+- **VirtualTerminal.SecureShell** – `SecureShellSession` for SSH.NET remote shells.
+
+Each addon has its own README with setup and usage:
+
+- `VirtualTerminal.CommandLine/README.md`
+- `VirtualTerminal.SecureShell/README.md`
+
+---
+
+## Small features & UX details
+
+- **Clear screen**: `TerminalControl.Clear()` sends `ESC[2J ESC[H`.
+- **Font zoom**: `Ctrl + Mouse Wheel` changes the render font size.
+- **Scroll-to-bottom indicator**: appears when scrolled up; click or press a key to return to live output.
+- **Auto-scrolling**: when at the bottom, new output keeps the view pinned.
+- **Resize debounce**: both controls debounce rapid window resize events and suppress intermediate renders so backends like ConPTY have time to produce a clean reflow frame.
+
+### Context menu and built-in commands
+
+Both controls expose static commands for common terminal operations. If no `ContextMenu` is assigned, the right mouse button behaves in terminal style: **copy** when text is selected, **paste** otherwise. If you assign a `ContextMenu`, the control lets the framework open it and the commands can be used from XAML.
+
+**WPF**
+
+```xml
+<vt:TerminalControl x:Name="Terminal" ...>
+    <vt:TerminalControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Command="{x:Static vt:TerminalControl.CopyCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Command="{x:Static vt:TerminalControl.PasteCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <Separator />
+            <MenuItem Command="{x:Static vt:TerminalControl.SelectAllCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <MenuItem Command="{x:Static vt:TerminalControl.ClearCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+        </ContextMenu>
+    </vt:TerminalControl.ContextMenu>
+</vt:TerminalControl>
+```
+
+**Avalonia**
+
+```xml
+<vt:TerminalControl x:Name="Terminal" ...>
+    <vt:TerminalControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Command="{x:Static vt:TerminalControl.CopyCommand}" CommandParameter="{Binding #Terminal}" />
+            <MenuItem Command="{x:Static vt:TerminalControl.PasteCommand}" CommandParameter="{Binding #Terminal}" />
+            <Separator />
+            <MenuItem Command="{x:Static vt:TerminalControl.SelectAllCommand}" CommandParameter="{Binding #Terminal}" />
+            <MenuItem Command="{x:Static vt:TerminalControl.ClearCommand}" CommandParameter="{Binding #Terminal}" />
+        </ContextMenu>
+    </vt:TerminalControl.ContextMenu>
+</vt:TerminalControl>
+```
+
+| Command | Action |
+| --- | --- |
+| `CopyCommand` | Copies the current selection to the clipboard. |
+| `PasteCommand` | Pastes the clipboard content into the session. |
+| `SelectAllCommand` | Selects the entire visible screen. |
+| `ClearCommand` | Sends `ESC[2J ESC[H` to clear the screen. |
+
+`Ctrl+C`/`Ctrl+V` and `Ctrl+Shift+C` keep working as before.
+
+---
+
+## Notes & limitations
+
+- **ConPTY resize**: ConPTY handles its own reflow. The engine resizes the local geometry and lets ConPTY repaint/overwrite the visible area. A minimum grid size (10×3) is enforced to avoid shell resets at extremely small sizes.
+- **Windows-only backends**: `VirtualTerminal.CommandLine` and `VirtualTerminal.SecureShell` target `net10.0-windows`. The core engine and Avalonia control target `net10.0`.
+
+---
+
+## Changelog
+
+### Unreleased
+
+#### WPF `TerminalControl`
+
+- **xterm mouse tracking forwarding.** When the running app has enabled mouse reporting (`DECSET 1000/1002/1003`), clicks, drags and wheel are forwarded to it as xterm sequences (SGR 1006 when enabled, legacy otherwise) instead of being used for local selection and scrollback. This lets full-screen TUIs (e.g. `claude` in fullscreen mode) receive mouse events. `Shift` bypasses forwarding so the user can still copy text from a mouse-owning app. New internal helpers: `IsMouseReporting`, `ShouldForwardToApp`, `MapMouseButton`, `ShouldReportMotion`; state `_trackedButton` tracks the held button for button-event/any-event motion.
+- **Meta (Alt) key sequences.** WPF does not fire `TextInput` while Alt is held, so character keys with Alt were dropped. The control now composes the xterm meta sequence `ESC + <base char>` for **left Alt** + printable, resolving `e.SystemKey` (WPF reports `Key.System` under Alt). **AltGr (right Alt)** is excluded: it composes alternate characters (e.g. `AltGr+2 = @`) and already arrives through `OnPreviewTextInput`. `Ctrl+Alt` is also excluded (not pure meta). New `KeyHelper.GetCharFromKey(Key, bool ignoreAlt)` neutralizes Alt in the keyboard state before `ToUnicode`, and `KeyHelper.IsRightAltPressed()` distinguishes AltGr.
+- **Lifecycle fix.** `Unloaded` no longer disposes the control: WPF raises `Unloaded` whenever the control leaves the visual tree (reparenting, template re-application, content swap) but the same instance can be reattached and must keep rendering. `OnControlLoaded`/`OnControlUnloaded` now only start/stop the dispatcher timers; tearing down the renderer is the owner's job via `Dispose`. Previously, disposing on `Unloaded` left `_rendererConfigured` true with a released `GlyphCache` and every later `OnRender` threw "GlyphCache not configured". `Dispose` is now idempotent and gates renders via `_disposed` / `_rendererConfigured`.
+- **Host screen scan.** New `GetVisibleScreenText()` returns the visible screen (primary or alternate buffer) one row per line, read under the buffer lock, and the `ScreenUpdated` event is raised on the UI thread (at `DispatcherPriority.Background`, after the visual is invalidated) whenever the session buffer updates. Lets the host scan the visible screen for sentinels (e.g. a pending-question marker) without polling.
+
+#### `VirtualTerminal.Input.MouseEncoder`
+
+- New `EncodeMotion(TerminalMouseButton?, int x, int y, TerminalModifier, bool sgrEncoding)` for pointer-motion (drag/hover) reports. Bit 5 (value 32) of the code marks a motion event; `button == null` reports motion with no button down (any-event mode).
+
+#### `VirtualTerminal.CommandLine` (Win32ProcessFactory)
+
+- `CreateProcess` now receives `info.Environment` and `info.CurrentDirectory` instead of `null`/`null`. Previously the configured working directory for the ConPTY session (`ProcessCreationInfo.CurrentDirectory`) was ignored and the shell started in the host's cwd.

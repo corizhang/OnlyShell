@@ -1,0 +1,81 @@
+# OnlyShell
+
+OnlyShell 是一款面向 Windows 的 SSH 工作台，提供交互式终端、SFTP 文件管理和 GitHub 加密配置同步。界面采用紧凑的代码工作区风格：直角边框、深色背景、琥珀色强调，以及青绿状态提示。
+
+> 当前项目处于早期开发阶段，尚未提供正式安装包。使用前请先从源码构建，并在测试环境验证连接和传输行为。
+
+## 功能
+
+- **主机管理**：按分组保存、搜索、编辑主机资料，并记录主机指纹。
+- **SSH 终端**：多标签交互式终端，支持密码或 SSH 私钥认证、断线状态提示和手动重连。
+- **SFTP 文件管理**：本地与远程双栏浏览，可切换本地盘符、多选文件与目录、拖放传输、递归传输目录，并查看/取消传输队列任务。
+- **GitHub 同步**：使用 GitHub App Device Flow 授权，将主机资料加密后同步至指定的私有仓库；远端版本冲突会阻止覆盖。
+- **本机凭据保护**：SSH 密码和 GitHub 访问令牌存放在当前 Windows 用户的凭据管理器中。
+
+## 安全与同步范围
+
+同步载荷只包含主机名称、地址、端口、用户名、分组、收藏状态、备注、认证类型和最近连接时间。载荷在上传前使用 AES-GCM 加密，密钥由用户输入的同步口令经 PBKDF2-SHA256 派生。
+
+SSH 密码、私钥内容、私钥口令和本机私钥文件路径不会进入同步数据。拉取配置时，同一主机 ID 对应的本机密码凭据引用和私钥路径会保留；远端没有的主机会在确认后从本机列表移除。加密口令不保存在应用中，遗忘后无法解密云端数据。
+
+## 环境要求
+
+- Windows 10/11
+- .NET 10 SDK（`global.json` 指定 10.0.100，并允许使用同一 feature band 的更新版本）
+- 可访问 GitHub 的网络，用于 Device Flow 登录和同步
+
+## 构建与启动
+
+在仓库根目录打开 PowerShell：
+
+```powershell
+dotnet restore OnlyShell.sln
+dotnet build OnlyShell.sln
+dotnet run --project src/OnlyShell.App/OnlyShell.App.csproj
+```
+
+应用数据保存在 `%LOCALAPPDATA%\OnlyShell\`，包括 SQLite 主机数据库和同步设置；访问令牌本身保存在 Windows 凭据管理器。
+
+## 配置 GitHub 同步
+
+1. 在 GitHub 创建一个专用私有仓库，并记下仓库所有者、名称和分支。OnlyShell 会在仓库中维护 `.onlyshell/config.v1.json`。
+2. 使用 GitHub App Device Flow 登录。应用所用的 GitHub App 必须启用 **Device Flow**，并授予 Repository permissions 中的 **Contents: Read and write**。Webhook 与 Client Secret 不需要。
+3. 在 OnlyShell 的“同步”页填写仓库信息，首次使用时执行 **ENCRYPT + PUSH**；其他设备登录后执行 **PULL / REPLACE LOCAL**。
+4. 每台设备输入同一个同步加密口令。拉取会替换本地主机列表，应用会在操作前再次确认。
+
+如果你是从源码构建自己的 OnlyShell 实例，请在 `src/OnlyShell.App/GitHubSyncService.cs` 中将 `ClientId` 替换为你注册的 GitHub App Client ID，并确认该 App 已配置上述 Device Flow 与仓库权限。Client ID 是公开标识；不要把 Client Secret 或用户访问令牌提交到仓库。
+
+## 项目结构
+
+```text
+src/
+  OnlyShell.App/                    WPF 应用与工作区界面
+  OnlyShell.Presentation/           ViewModel 与界面服务契约
+  OnlyShell.Application/            应用层
+  OnlyShell.Core/                   领域模型与接口
+  OnlyShell.Infrastructure.Data/    SQLite 持久化
+  OnlyShell.Infrastructure.Secrets/ Windows 凭据管理器适配
+  OnlyShell.Infrastructure.Ssh/     SSH.NET 与 SFTP 适配
+  OnlyShell.Infrastructure.Sync/    GitHub API、Device Flow 与载荷加密
+  OnlyShell.Terminal/               终端适配层
+TerminalPoc/                         独立终端验证项目及当前复用的 VT 源码
+design/prototypes/                  UI 概念图
+docs/                                工程基线与实现规划
+```
+
+`OnlyShell.Terminal` 当前复用 `TerminalPoc/VirtualTerminal-upstream/` 中验证过的终端源码。该目录包含上游 Apache-2.0 许可文件；发布前应继续核对第三方许可与版本信息。
+
+## 界面原型
+
+工作台、终端和 SFTP 概念图见 [`design/prototypes/`](design/prototypes/)。原型用于表达布局和视觉方向，图中的示例数据并非产品承诺。
+
+## 已知限制
+
+- 当前只支持 Windows 桌面端，尚无安装包或自动更新流程。
+- SSH 终端断线重连会保留当前窗口缓冲区，但不会恢复远端 shell 进程或重放命令。
+- SFTP 递归传输遇到符号链接时会跳过链接，避免意外跟随到其他目录。
+- 同步采用整份主机配置的推送/拉取，不做字段级合并；跨设备同步前请先确认目标设备上的本地主机资料。
+
+## 许可证
+
+本项目尚未声明整体开源许可证。`TerminalPoc/VirtualTerminal-upstream/` 中的第三方组件遵循其随附的 Apache-2.0 许可。

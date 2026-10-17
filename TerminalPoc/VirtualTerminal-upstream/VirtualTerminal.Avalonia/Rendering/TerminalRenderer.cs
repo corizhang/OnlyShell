@@ -1,0 +1,221 @@
+using Avalonia;
+using Avalonia.Media;
+using System.Diagnostics;
+using System.Text;
+using VirtualTerminal.Buffer;
+using VirtualTerminal.Model;
+using VirtualTerminal.Options;
+using AvaloniaColor = Avalonia.Media.Color;
+using Color = VirtualTerminal.Model.TerminalColor;
+
+namespace VirtualTerminal.Rendering;
+
+/// <summary>
+/// Paints terminal rows using <see cref="GlyphRun"/>: coalesces same-style cells into runs,
+/// resolves default/inverse/conceal colors, draws backgrounds, underlines, strikethrough,
+/// overline, and the cursor. Positioning is column-based (monospace advance assumption);
+/// wide glyphs render at single-cell width in Phase 1.
+/// </summary>
+public sealed class TerminalRenderer : IDisposable
+{
+    private readonly GlyphCache _glyphs = new();
+    private readonly Dictionary<uint, IBrush> _brushes = [];
+    private readonly StringBuilder _chars = new();
+    private readonly List<ushort> _glyphList = [];
+    private TerminalOptions _options = new();
+    /// <summary>
+    /// Releases all resources used by the current object.
+    /// </summary>
+    private double _emSize = 14;
+
+    /// <summary>Gets a value indicating whether the renderer has a valid font configuration.</summary>
+    public bool IsValid => _glyphs.IsValid;
+
+    /// <summary>Gets the size of a single terminal cell.</summary>
+    public Size CellSize => new(_glyphs.CellWidth, _glyphs.CellHeight);
+
+    /// <summary>Gets the font baseline offset from the top of a cell.</summary>
+    public double Baseline => _glyphs.Ascent;
+
+    /// <summary>Gets the width of a single terminal cell in pixels.</summary>
+    public double CellWidth => _glyphs.CellWidth;
+
+    /// <summary>Gets the height of a single terminal cell in pixels.</summary>
+    public double CellHeight => _glyphs.CellHeight;
+
+    /// <summary>Configures the renderer with the specified font family, size, and terminal options.</summary>
+    /// <param name="family">The primary font family name.</param>
+    /// <param name="emSize">The font size in device-independent pixels.</param>
+    /// <param name="options">The terminal options controlling colors, line height, and fallbacks.</param>
+    public void Configure(string family, double emSize, TerminalOptions options)
+    {
+        _options = options;
+        _emSize = emSize;
+        _glyphs.Configure(family, emSize, options.LineHeight, options.FontFallback);
+        _brushes.Clear();
+    }
+
+    /// <summary>Releases the glyph cache and rendering resources.</summary>
+    public void Dispose()
+        => _glyphs.Dispose();
+
+    /// <summary>Renders a single row into <paramref name="drawingContext"/> (local origin = row top-left).</summary>
+    public void RenderRow(DrawingContext drawingContext, Span<TerminalCellInfo> row, TerminalSelection? selection, int rowIndex)
+    {
+        double cellW = _glyphs.CellWidth;
+        double cellH = _glyphs.CellHeight;
+        double baselineY = _glyphs.Ascent;
+        int len = row.Length;
+
+        int col = 0;
+        while (col < len)
+        {
+            CellRenderStyle style = row[col].Style;
+            int runStart = col;
+            while (col < len && row[col].Style == style)
+                col++;
+
+            int runEnd = col; // exclusive
+
+            // Split the style run at selection boundaries so only selected cells are highlighted.
+            int segStart = runStart;
+            while (segStart < runEnd)
+            {
+                bool selected = selection.HasValue && selection.Value.Contains(rowIndex, segStart);
+                int segEnd = segStart + 1;
+                while (segEnd < runEnd && (selection.HasValue && selection.Value.Contains(rowIndex, segEnd)) == selected)
+                    segEnd++;
+
+                double x = segStart * cellW;
+                (Color fg, Color bg) = ResolveColors(style, selected);
+                if (!style.BackgroundIsDefault || style.Inverse || selected)
+                    drawingContext.DrawRectangle(Brush(bg), null, new Rect(x, 0, (segEnd - segStart) * cellW, cellH));
+
+                if (!style.Continuation)
+                    DrawGlyphRun(drawingContext, row, segStart, segEnd, x, baselineY, Brush(fg), style);
+
+                segStart = segEnd;
+            }
+        }
+    }
+
+    private void DrawGlyphRun(DrawingContext drawingContext, Span<TerminalCellInfo> row, int start, int end,
+        double x, double baselineY, IBrush fgBrush, CellRenderStyle style)
+    {
+        double cellW = _glyphs.CellWidth;
+
+        // Accumulate per-typeface segments; flush on typeface change.
+        GlyphTypeface? current = null;
+        _chars.Clear();
+        _glyphList.Clear();
+        Span<char> text = stackalloc char[2];
+        int segCellCount = 0;
+        double segX = x;
+
+        void Flush()
+        {
+            if (current is null || _chars.Length == 0)
+            {
+                segCellCount = 0;
+                _chars.Clear();
+                _glyphList.Clear();
+                return;
+            }
+
+            string text = _chars.ToString();
+            double segWidth = segCellCount * cellW;
+
+            // Snapshot the glyph list into an array. Avalonia may retain the collection
+            // internally, and we reuse the builder lists for subsequent segments.
+            GlyphRun run = new GlyphRun(current, _emSize, text.AsMemory(), _glyphList.ToArray(), new Point(segX, baselineY), 0);
+            drawingContext.DrawGlyphRun(fgBrush, run);
+            DrawDecorations(drawingContext, style, segX, segWidth, baselineY);
+
+            segX += segWidth;
+            _chars.Clear();
+            _glyphList.Clear();
+            segCellCount = 0;
+        }
+
+        for (int i = start; i < end; i++)
+        {
+            ref readonly TerminalCellInfo cell = ref row[i];
+            if (cell.Style.Continuation)
+                continue;
+
+            Rune rune = cell.Character;
+            (GlyphTypeface tf, ushort glyph) = _glyphs.GetGlyph(rune);
+
+            if (current is not null && !ReferenceEquals(tf, current))
+                Flush();
+
+            current = tf;
+            bool encoded = rune.TryEncodeToUtf16(text, out int charsWritten);
+            Debug.Assert(encoded && charsWritten > 0);
+
+            for (int c = 0; c < charsWritten; c++)
+                _chars.Append(text[c]);
+
+            _glyphList.Add(glyph);
+            segCellCount++;
+        }
+
+        Flush();
+    }
+
+    private void DrawDecorations(DrawingContext drawingContext, CellRenderStyle style, double x, double width, double baselineY)
+    {
+        double cellH = _glyphs.CellHeight;
+        Color fg = style.ForegroundIsDefault ? _options.DefaultForeground : style.Foreground;
+        Color decoColor = style.UnderlineColorIsDefault ? fg : style.UnderlineColor;
+        IBrush decoBrush = Brush(decoColor);
+        double thickness = Math.Max(1, _glyphs.UnderlineThickness);
+        Pen pen = new(decoBrush, thickness);
+
+        if (style.UnderlineStyle != Enums.Underline.None || style.DoublyUnderlined)
+        {
+            double y = baselineY + _glyphs.UnderlinePosition;
+            drawingContext.DrawLine(pen, new Point(x, y), new Point(x + width, y));
+            if (style.UnderlineStyle == Enums.Underline.Double)
+                drawingContext.DrawLine(pen, new Point(x, y - thickness - 1), new Point(x + width, y - thickness - 1));
+        }
+
+        if (style.Strikethrough)
+        {
+            double y = baselineY + _glyphs.StrikethroughPosition;
+            drawingContext.DrawLine(pen, new Point(x, y), new Point(x + width, y));
+        }
+
+        if (style.Overline)
+            drawingContext.DrawLine(pen, new Point(x, 0), new Point(x + width, 0));
+    }
+
+    private (Color Fg, Color Bg) ResolveColors(CellRenderStyle style, bool selected)
+    {
+        Color fg = style.ForegroundIsDefault ? _options.DefaultForeground : style.Foreground;
+        Color bg = style.BackgroundIsDefault ? _options.DefaultBackground : style.Background;
+
+        if (style.Inverse)
+            (fg, bg) = (bg, fg);
+
+        if (style.Conceal)
+            fg = bg;
+
+        if (selected && style.ForegroundIsDefault && style.BackgroundIsDefault && !style.Inverse)
+            (fg, bg) = (_options.DefaultBackground, _options.DefaultForeground);
+
+        return (fg, bg);
+    }
+
+    private IBrush Brush(Color color)
+    {
+        AvaloniaColor aColor = new AvaloniaColor(color.A, color.R, color.G, color.B);
+        if (!_brushes.TryGetValue(aColor.ToUInt32(), out IBrush? brush))
+        {
+            brush = new SolidColorBrush(aColor);
+            _brushes[aColor.ToUInt32()] = brush;
+        }
+
+        return brush;
+    }
+}

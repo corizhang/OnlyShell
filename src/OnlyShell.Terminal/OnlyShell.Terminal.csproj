@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OnlyShell.Core\OnlyShell.Core.csproj" />
+    <ProjectReference Include="..\OnlyShell.Infrastructure.Ssh\OnlyShell.Infrastructure.Ssh.csproj" />
+    <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.WPF\VirtualTerminal.WPF.csproj" />
+    <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.SecureShell\VirtualTerminal.SecureShell.csproj" />
+  </ItemGroup>
+</Project>

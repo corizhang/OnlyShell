@@ -1,0 +1,755 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>VirtualTerminal.WPF</name>
+    </assembly>
+    <members>
+        <member name="T:VirtualTerminal.Automation.TerminalControlAutomationPeer">
+            <summary>
+            UI Automation peer for the WPF <see cref="P:VirtualTerminal.Automation.TerminalControlAutomationPeer.TerminalControl"/>. Exposes the terminal as a
+            document and implements <see cref="T:System.Windows.Automation.Provider.ITextProvider"/> so screen readers can access the full
+            scrollback + visible buffer text.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetAutomationControlTypeCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetClassNameCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetNameCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetPattern(System.Windows.Automation.Peers.PatternInterface)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetAutomationIdCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.IsContentElementCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.IsControlElementCore">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.IsKeyboardFocusableCore">
+            <inheritdoc />
+        </member>
+        <member name="P:VirtualTerminal.Automation.TerminalControlAutomationPeer.DocumentRange">
+            <inheritdoc />
+        </member>
+        <member name="P:VirtualTerminal.Automation.TerminalControlAutomationPeer.SupportedTextSelection">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetSelection">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetVisibleRanges">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.RangeFromChild(System.Windows.Automation.Provider.IRawElementProviderSimple)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.RangeFromPoint(System.Windows.Point)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.UpdateText">
+            <summary>
+            Refreshes the cached accessible text from the control and raises the appropriate
+            automation events when it changes. Must be called on the UI thread.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Automation.TerminalControlAutomationPeer.GetRawProvider">
+            <summary>
+            Returns the raw UI Automation provider for this peer so text ranges can reference it.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.Automation.TerminalTextRangeProvider">
+            <summary>
+            A UI Automation text range over a snapshot of the terminal's scrollback + visible buffer.
+            This is a read-only range: selection methods are no-ops.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer">
+            <summary>
+            Cursor visual that glides from its previous cell to the new one. Near moves (typing, arrow
+            keys) animate: the bar is drawn at both the previous cell (A) and the target cell (B),
+            connected by a transition quadrilateral, and A interpolates toward B with a cosine ease-in-out
+            over <see cref="P:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.AnimationDuration"/>. Far jumps (newline, prompt redraws, absolute cursor
+            positioning) teleport, so the cursor never sweeps through transient positions. The cursor is
+            drawn in the color inverse of <see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.BackgroundColor"/>
+            (difference-style; per-pixel invert blending is not available on <see cref="T:System.Windows.Media.DrawingContext"/>).
+            Steady (no blink); combine with a private blink timer if wanted — see
+            <see cref="T:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer"/>.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.AnimationDuration">
+            <summary>
+            How long the glide from A to B takes.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.FrameInterval">
+            <summary>
+            How often does timer kicks the renderer.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.MaxGlideCells">
+            <summary>
+            Maximum cell distance that still glides. Moves farther than this (in cells, Manhattan
+            metric) teleport instead: newline + prompt redraws arrive as separate decode chunks and
+            would otherwise make the cursor sweep through transient positions (line start) on its way
+            to the new prompt end. Typing stays a stream of small glides. No timer involved.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.#ctor">
+            <summary>Initializes a new instance of the <see cref="T:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer"/> class.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.Attach(VirtualTerminal.TerminalControl)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.Detach">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.MoveTo(System.Windows.Rect)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.AnimatedTerminalCursorRenderer.DrawQuadrilateral(System.Windows.Media.DrawingContext,System.Windows.Rect,System.Windows.Rect,System.Windows.Media.Brush)">
+            <summary>Fills the quadrilateral swept between the A and B bar rectangles.</summary>
+        </member>
+        <member name="T:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer">
+            <summary>
+            Default cursor visual: a thin vertical bar (15% of the cell width, at least 2 device units)
+            that snaps instantly to the target cell and blinks on a private 530ms timer. Replaceable via
+            <see cref="P:VirtualTerminal.TerminalControl.CursorRenderer"/>.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer.#ctor">
+            <summary>Initializes a new instance of the <see cref="T:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer"/> class.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer.Attach(VirtualTerminal.TerminalControl)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer.Detach">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer.MoveTo(System.Windows.Rect)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)">
+            <inheritdoc/>
+        </member>
+        <member name="T:VirtualTerminal.Cursors.LandingTerminalCursorRenderer">
+            <summary>
+            Cursor visual with a takeoff-landing transition on every move. The cursor at the source cell
+            expands in width and height while fading to transparency (the "takeoff" — the cursor appears
+            to fly up and away), while at the target cell an oversized transparent cursor shrinks back to
+            its normal size and color (the "landing"). Both phases run concurrently over
+            <see cref="P:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.AnimationDuration"/> with a cosine ease; there is no sweep between cells, so the
+            effect works equally well for far jumps (newline, prompt redraws) and single-cell typing.
+            The cursor is drawn in the color inverse of <see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.BackgroundColor"/>
+            (difference-style; per-pixel invert blending is not available on <see cref="T:System.Windows.Media.DrawingContext"/>).
+            Steady (no blink); combine with a private blink timer if wanted — see
+            <see cref="T:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer"/>.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.AnimationDuration">
+            <summary>
+            How long the takeoff-landing effect takes.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.FrameInterval">
+            <summary>
+            How often the timer kicks the renderer.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.ExpandFactor">
+            <summary>
+            Size multiplier of the cursor at the peak of the effect: the takeoff grows toward this
+            factor while fading out, and the landing starts at this factor while transparent and
+            shrinks back to the normal cell size.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.MaxInstantCells">
+            <summary>
+            Maximum cell distance (Manhattan metric) that still moves instantly. Single-cell moves —
+            typing, arrow keys — snap straight to the new cell; only longer jumps play the
+            takeoff-landing effect. Set to 0 to animate every move.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.#ctor">
+            <summary>Initializes a new instance of the <see cref="T:VirtualTerminal.Cursors.LandingTerminalCursorRenderer"/> class.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.Attach(VirtualTerminal.TerminalControl)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.Detach">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.MoveTo(System.Windows.Rect)">
+            <inheritdoc/>
+        </member>
+        <member name="M:VirtualTerminal.Cursors.LandingTerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)">
+            <inheritdoc/>
+        </member>
+        <member name="T:VirtualTerminal.Helpers.ColorHelper">
+            <summary>
+            Conversion helpers between WPF <see cref="T:System.Windows.Media.Color"/> and the core <see cref="T:VirtualTerminal.Model.TerminalColor"/>.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Helpers.ColorHelper.ToWindowsMediaColor(VirtualTerminal.Model.TerminalColor)">
+            <summary>Converts a core <see cref="T:VirtualTerminal.Model.TerminalColor"/> to a WPF <see cref="T:System.Windows.Media.Color"/>.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Helpers.ColorHelper.ToTerminalColor(System.Windows.Media.Color)">
+            <summary>Converts a WPF <see cref="T:System.Windows.Media.Color"/> to a core <see cref="T:VirtualTerminal.Model.TerminalColor"/>.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Helpers.ColorHelper.IsValidConsoleColor(VirtualTerminal.Model.TerminalColor)">
+            <summary>
+            Checks whether the specified color is representable in the standard Windows console palette
+            (channels limited to 0/128/255).
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.Helpers.EncodingHelper">
+            <summary>Helpers for converting data between character encodings.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Helpers.EncodingHelper.Convert(System.Text.Encoding,System.Text.Encoding,System.ReadOnlySpan{System.Byte})">
+            <summary>
+            Converts the provided <paramref name="bytes"/> from <paramref name="srcEncoding"/> to
+            <paramref name="dstEncoding"/>.
+            </summary>
+            <returns>A byte array containing the encoded result.</returns>
+        </member>
+        <member name="T:VirtualTerminal.Interop.ConsoleHelper">
+            <summary>
+            Helpers for allocating and configuring a Windows console that backs the terminal screen buffer.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.ConsoleHelper.Allocate">
+            <summary>
+            Allocates a console for the current process if one doesn't exist, and hides its window.
+            This is required to work with console screen buffers.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.ConsoleHelper.SetEncoding">
+            <summary>
+            Sets console input and output code pages to UTF-8.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.Interop.KeyHelper">
+            <summary>
+            Converts WPF keyboard input into VT/ANSI-compatible sequences (VT200 for special keys) or printable text.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.ConvertToVT(System.Windows.Input.KeyEventArgs)">
+            <summary>
+            Converts a WPF key event into a VT/ANSI string (when possible).
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.ConvertToVT(System.Windows.Input.Key)">
+            <summary>
+            Converts a WPF <see cref="T:System.Windows.Input.Key"/> into a VT200 control sequence (for special keys) or a printable character.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.GetVT200Code(System.Windows.Input.Key)">
+            <summary>
+            Returns a VT200 escape sequence for special keys (arrows, function keys, etc.), or <c>null</c> if not mapped.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.GetCharFromKey(System.Windows.Input.Key)">
+            <summary>
+            Attempts to translate a WPF <see cref="T:System.Windows.Input.Key"/> into a Unicode character using Windows keyboard state APIs.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.GetCharFromKey(System.Windows.Input.Key,System.Boolean)">
+            <summary>
+            Same as above, but with <paramref name="ignoreAlt"/> set to true; this neutralizes the Alt key state
+            before calling ToUnicode. It is used to compose the meta sequence (ESC + base character)
+            for Left Alt + character: the xterm convention dictates sending ESC followed by the character
+            produced without Alt (respecting Shift/Caps Lock), rather than the one produced with Alt pressed.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.IsRightAltPressed">
+            <summary>
+            True if the right Alt (AltGr) key is pressed. AltGr produces alternative characters in European layouts and is NOT a meta key; it is distinct from the left Alt key.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Interop.KeyHelper.IsModifier(System.Windows.Input.Key)">
+            <summary>
+            Returns <c>true</c> if the key is a modifier (Shift/Ctrl/Alt).
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.CommandSubmittedEventHandler">
+            <summary>
+            Routed event handler for <see cref="E:VirtualTerminal.PromptBox.CommandSubmitted"/>. Raised when the user submits a command
+            (Enter key or clicking the submit button).
+            </summary>
+            <param name="sender">The object that raised the event.</param>
+            <param name="e">Event data containing the submitted command.</param>
+        </member>
+        <member name="T:VirtualTerminal.KeyPressedEventHandler">
+            <summary>
+            Routed event handler for <see cref="E:VirtualTerminal.PromptBox.KeyPressed"/>. Raised when a raw key sequence is forwarded
+            to the attached terminal session.
+            </summary>
+            <param name="sender">The object that raised the event.</param>
+            <param name="e">Event data containing the raw key bytes.</param>
+        </member>
+        <member name="T:VirtualTerminal.CommandSubmittedEventArgs">
+            <summary>
+            Routed event arguments for <see cref="E:VirtualTerminal.PromptBox.CommandSubmitted"/>, containing the submitted command text.
+            </summary>
+            <remarks>
+            Initializes a new instance of the <see cref="T:VirtualTerminal.CommandSubmittedEventArgs"/> class.
+            </remarks>
+        </member>
+        <member name="M:VirtualTerminal.CommandSubmittedEventArgs.#ctor(System.Windows.RoutedEvent,System.Object,System.String)">
+            <summary>
+            Routed event arguments for <see cref="E:VirtualTerminal.PromptBox.CommandSubmitted"/>, containing the submitted command text.
+            </summary>
+            <remarks>
+            Initializes a new instance of the <see cref="T:VirtualTerminal.CommandSubmittedEventArgs"/> class.
+            </remarks>
+        </member>
+        <member name="P:VirtualTerminal.CommandSubmittedEventArgs.CommandText">
+            <summary>
+            Gets the submitted command text.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.KeyPressedEventArgs">
+            <summary>
+            Routed event arguments for <see cref="E:VirtualTerminal.PromptBox.KeyPressed"/>, containing raw key bytes sent to the session.
+            </summary>
+            <remarks>
+            Initializes a new instance of the <see cref="T:VirtualTerminal.KeyPressedEventArgs"/> class.
+            </remarks>
+        </member>
+        <member name="M:VirtualTerminal.KeyPressedEventArgs.#ctor(System.Windows.RoutedEvent,System.Object,System.Byte[])">
+            <summary>
+            Routed event arguments for <see cref="E:VirtualTerminal.PromptBox.KeyPressed"/>, containing raw key bytes sent to the session.
+            </summary>
+            <remarks>
+            Initializes a new instance of the <see cref="T:VirtualTerminal.KeyPressedEventArgs"/> class.
+            </remarks>
+        </member>
+        <member name="P:VirtualTerminal.KeyPressedEventArgs.KeyData">
+            <summary>
+            Gets the raw key data that was sent to the terminal session.
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.PromptBox">
+            <summary>
+            A small command entry control (prompt + input + submit button) that can optionally send submitted commands
+            into an attached <see cref="T:VirtualTerminal.Interfaces.ITerminalSession"/>.
+            </summary>
+            <summary>
+            PromptBox
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.PromptBox.Session">
+            <summary>
+            Gets or sets the target <see cref="T:VirtualTerminal.Interfaces.ITerminalSession"/>. If set, submitted commands and special keys
+            are sent to the session.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.PromptBox.InputText">
+            <summary>
+            Gets or sets the current input text.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.PromptBox.IsInputEnabled">
+            <summary>
+            Gets or sets whether the input box is enabled.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.PromptBox.Prompt">
+            <summary>
+            Gets or sets the prompt label text displayed before the input box (for example, <c>&gt; </c>).
+            </summary>
+        </member>
+        <member name="E:VirtualTerminal.PromptBox.KeyPressed">
+            <summary>
+            Occurs when a special key (VT sequence) is pressed and forwarded. Routed event (bubbling).
+            </summary>
+        </member>
+        <member name="E:VirtualTerminal.PromptBox.CommandSubmitted">
+            <summary>
+            Occurs when the user submits a command (Enter or submit button). Routed event (bubbling).
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.PromptBox.#ctor">
+            <summary>
+            Initializes a new <see cref="T:VirtualTerminal.PromptBox"/>.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.SessionProperty">
+            <summary>
+            Identifies the <see cref="P:VirtualTerminal.PromptBox.Session"/> dependency property.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.InputTextProperty">
+            <summary>
+            Identifies the <see cref="P:VirtualTerminal.PromptBox.InputText"/> dependency property.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.IsInputEnabledProperty">
+            <summary>
+            Identifies the <see cref="P:VirtualTerminal.PromptBox.IsInputEnabled"/> dependency property.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.PromptProperty">
+            <summary>
+            Identifies the <see cref="P:VirtualTerminal.PromptBox.Prompt"/> dependency property.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.CommandSubmittedEvent">
+            <summary>
+            Identifies the <see cref="E:VirtualTerminal.PromptBox.CommandSubmitted"/> routed event.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.PromptBox.KeyPressedEvent">
+            <summary>
+            Identifies the <see cref="E:VirtualTerminal.PromptBox.KeyPressed"/> routed event.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.PromptBox.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:VirtualTerminal.Rendering.GlyphCache">
+            <summary>
+            Resolves <see cref="T:System.Windows.Media.GlyphTypeface"/> instances for the primary font and fallback families,
+            maps codepoints to glyph indices (with fallback), and exposes font metrics for grid layout.
+            Glyph lookups are cached per codepoint.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.IsValid">
+            <summary>Gets a value indicating whether the cache has been configured with a valid primary typeface.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.CellWidth">
+            <summary>Gets the advance width of a single cell in pixels.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.CellHeight">
+            <summary>Gets the height of a single cell in pixels.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.Ascent">
+            <summary>Gets the typographic ascent used to position glyphs within the cell.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.UnderlinePosition">
+            <summary>Gets the underline offset from the baseline.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.UnderlineThickness">
+            <summary>Gets the recommended underline thickness.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.StrikethroughPosition">
+            <summary>Gets the strikethrough offset from the baseline.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.StrikethroughThickness">
+            <summary>Gets the recommended strikethrough thickness.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.GlyphCache.Primary">
+            <summary>Gets the primary glyph typeface used for rendering.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.GlyphCache.Configure(System.String,System.Double,System.Double,System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>Rebuilds the cache for the given primary family, size, line-height, and fallbacks.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.GlyphCache.GetGlyph(System.Text.Rune)">
+            <summary>Resolves the (typeface, glyph) for a codepoint, trying fallbacks when absent.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.GlyphCache.GetGlyph(System.Text.Rune,System.Windows.FontWeight,System.Windows.FontStyle)">
+            <summary>Resolves the (typeface, glyph) for a codepoint and requested weight/style, trying fallbacks when absent.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.GlyphCache.Dispose">
+            <summary>Releases the glyph cache resources.</summary>
+        </member>
+        <member name="T:VirtualTerminal.Rendering.TerminalCursorRenderer">
+            <summary>
+            Pluggable cursor visual for <see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.TerminalControl"/>. The control drives the renderer:
+            it notifies the target cell rectangle via <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.MoveTo(System.Windows.Rect)"/> whenever the cursor position
+            changes, and calls <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)"/> once per render pass with the current state in
+            <see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.IsCursorVisible"/>/<see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.CursorBlinkMode"/>. The renderer owns its own visual
+            behavior — blinking, animation, transition effects. The default implementation blinks on a
+            private timer; custom implementations can run storyboard-driven interpolation from
+            <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.MoveTo(System.Windows.Rect)"/>, ignore <see cref="P:VirtualTerminal.Rendering.TerminalCursorRenderer.CursorBlinkMode"/>, or anything else.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalCursorRenderer.TerminalControl">
+            <summary>Gets the control this renderer is attached to, or <c>null</c> when detached.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalCursorRenderer.IsCursorVisible">
+            <summary>
+            Gets or sets whether the cursor would be visible this frame (control focused, scrolled to
+            the bottom, DECTCEM on, master <c>CursorVisible</c> on). Set by the owning control
+            immediately before each <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)"/> call.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalCursorRenderer.CursorBlinkMode">
+            <summary>
+            Gets or sets whether the application enabled the DEC ?12 (att610) cursor-blink mode.
+            Set by the owning control immediately before each <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)"/> call. The renderer
+            decides whether and how to honor it (the default renderer blinks regardless, matching
+            conventional terminal behavior).
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalCursorRenderer.BackgroundColor">
+            <summary>
+            Gets or sets the control's current background color. Set by the owning control immediately
+            before each <see cref="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)"/> call; renderers that draw a difference-style cursor use it
+            to pick a contrasting (inverted) color.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Attach(VirtualTerminal.TerminalControl)">
+            <summary>Called when the renderer is attached to a control (control entered the visual tree).</summary>
+            <param name="control">The owning terminal control.</param>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Detach">
+            <summary>Called when the renderer is detached from its control (control left the visual tree).</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalCursorRenderer.MoveTo(System.Windows.Rect)">
+            <summary>Notifies the renderer that the cursor target cell changed to <paramref name="cellRect"/>.</summary>
+            <param name="cellRect">The cursor cell rectangle in control content coordinates (the padding transform is already applied by the control).</param>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalCursorRenderer.Render(System.Windows.Media.DrawingContext)">
+            <summary>Draws the cursor into <paramref name="context"/> for the current state.</summary>
+            <param name="context">The drawing context, with the padding transform already applied.</param>
+        </member>
+        <member name="T:VirtualTerminal.Rendering.TerminalRenderer">
+            <summary>
+            Paints terminal rows using <see cref="T:System.Windows.Media.GlyphRun"/>: coalesces same-style cells into runs,
+            resolves default/inverse/conceal colors, draws backgrounds, underlines, strikethrough,
+            overline, and the cursor. Positioning is column-based (monospace advance assumption).
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalRenderer.IsValid">
+            <summary>Gets a value indicating whether the renderer has been configured with a valid font.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalRenderer.CellSize">
+            <summary>Gets the size of one terminal cell in device-independent pixels.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalRenderer.Baseline">
+            <summary>Gets the baseline offset within a cell.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalRenderer.CellWidth">
+            <summary>Gets the width of one terminal cell.</summary>
+        </member>
+        <member name="P:VirtualTerminal.Rendering.TerminalRenderer.CellHeight">
+            <summary>Gets the height of one terminal cell.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalRenderer.Configure(System.String,System.Double,VirtualTerminal.Options.TerminalOptions)">
+            <summary>Configures the renderer with the specified font family, size, and terminal options.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalRenderer.Dispose">
+            <summary>Releases the renderer resources.</summary>
+        </member>
+        <member name="M:VirtualTerminal.Rendering.TerminalRenderer.RenderRow(System.Windows.Media.DrawingContext,System.Span{VirtualTerminal.Model.TerminalCellInfo},System.Nullable{VirtualTerminal.Rendering.TerminalSelection},System.Int32,System.Single)">
+            <summary>Renders a single row into <paramref name="drawingContext"/> (local origin = row top-left).</summary>
+        </member>
+        <member name="T:VirtualTerminal.TerminalControl">
+            <summary>
+            WPF control that renders a <see cref="T:VirtualTerminal.Interfaces.ITerminalSession"/> using a fixed-size terminal grid
+            (size is derived from the control bounds). Scrolling is performed against the scrollback
+            buffer, not by scrolling a huge child element.
+            </summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.CopyCommand">
+            <summary>Copies the current selection to the clipboard.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.PasteCommand">
+            <summary>Pastes the clipboard content into the session.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.SelectAllCommand">
+            <summary>Selects the whole visible screen.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.ClearCommand">
+            <summary>Clears the terminal screen and scrollback.</summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.Session">
+            <summary>
+            Gets or sets the active <see cref="T:VirtualTerminal.Interfaces.ITerminalSession"/> displayed by this control.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.CursorRenderer">
+            <summary>
+            Gets or sets the renderer that draws the terminal cursor. Swap this to customize the
+            cursor visual or animate its movement; defaults to <see cref="T:VirtualTerminal.Cursors.DefaultTerminalCursorRenderer"/>.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.AllowDirectInput">
+            <summary>
+            Gets or sets whether this control should forward keyboard input directly into the session.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.ScrollDownVisible">
+            <summary>
+            Gets or sets whether the floating "scroll to bottom" button is enabled.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.ScreenBackground">
+            <summary>
+            Gets or sets the terminal background color.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.ScreenForeground">
+            <summary>
+            Gets or sets the terminal foreground color.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.CursorVisible">
+            <summary>
+            Gets or sets a value indicating whether the cursor is visible.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.ScrollbackLines">
+            <summary>
+            Gets or sets the maximum number of scrollback lines retained.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.LineHeight">
+            <summary>
+            Gets or sets the line height multiplier (1.0 = default).
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.OutputText">
+            <summary>
+            Gets the rendered output as text (reserved for higher-level usages).
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.AutoScrolling">
+            <summary>
+            Gets whether the viewport is pinned to the live bottom.
+            </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.Encoding">
+            <summary>
+            Gets the encoding used by the underlying session.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:VirtualTerminal.TerminalControl"/> control.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnCreateAutomationPeer">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnPropertyChanged(System.Windows.DependencyPropertyChangedEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.SelectAll">
+            <summary>Selects the entire visible screen.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.Clear">
+            <summary>Clears the terminal screen and moves the cursor to the home position.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnRender(System.Windows.Media.DrawingContext)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnRenderSizeChanged(System.Windows.SizeChangedInfo)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnGotKeyboardFocus(System.Windows.Input.KeyboardFocusChangedEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnLostKeyboardFocus(System.Windows.Input.KeyboardFocusChangedEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnPreviewKeyDown(System.Windows.Input.KeyEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnPreviewTextInput(System.Windows.Input.TextCompositionEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.ShouldReportMotion">
+            <summary>True when motion reports must be sent under the current tracking mode.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnMouseDown(System.Windows.Input.MouseButtonEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnMouseMove(System.Windows.Input.MouseEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnMouseUp(System.Windows.Input.MouseButtonEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.OnPreviewMouseWheel(System.Windows.Input.MouseWheelEventArgs)">
+            <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.ScrollBy(System.Int32)">
+            <summary>Scrolls the viewport by <paramref name="lines"/> (positive = up into history).</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.ScrollToBottom">
+            <summary>Snaps the viewport back to the live bottom of the buffer.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.GetVisibleScreenText">
+            <summary>
+            Returns the text of the visible screen (main or
+            alternate buffer), one row per line, reading under the buffer lock. Used by
+            the host to search for sentinels (e.g., the pending question marker).
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.GetAccessibleText">
+            <summary>
+            Returns the full accessible text (scrollback + visible screen) for UI Automation.
+            </summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.Dispose">
+            <summary>
+            Releases timers, unsubscribes from session events, and disposes the renderer.
+            Must be called by whoever owns the control (removing it from the visual tree is not
+            enough): the control is unusable afterwards and only paints its background.
+            </summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.TitleChanged">
+            <summary>Raised when the connected program changes the title (OSC 0/1/2).</summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.Bell">
+            <summary>Raised on BEL.</summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.NotificationReceived">
+            <summary>Raised when an OSC 9 desktop notification is received.</summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.ShellIntegrationMark">
+            <summary>Raised when an OSC 133 shell-integration mark is received.</summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.Iterm2Annotation">
+            <summary>Raised when an OSC 1337 iTerm2 annotation is received.</summary>
+        </member>
+        <member name="E:VirtualTerminal.TerminalControl.ScreenUpdated">
+            <summary>Raised on the UI thread after the session buffer has been updated with new
+            output (same tick that invalidates the visual). Lets the host scan the visible
+            screen for sentinels (e.g. a "pregunta pendiente" marker) without polling.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.SessionProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.Session"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.AllowDirectInputProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.AllowDirectInput"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.ScrollDownVisibleProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScrollDownVisible"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.ScreenBackgroundProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScreenBackground"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.ScreenForegroundProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScreenForeground"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.CursorVisibleProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.CursorVisible"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.ScrollbackLinesProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScrollbackLines"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.LineHeightProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.LineHeight"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.OutputTextProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.OutputText"/> dependency property.</summary>
+        </member>
+        <member name="F:VirtualTerminal.TerminalControl.AutoScrollingProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.AutoScrolling"/> dependency property.</summary>
+        </member>
+    </members>
+</doc>

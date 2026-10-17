@@ -1,0 +1,21 @@
+<Window x:Class="OnlyShell.App.HostKeyPromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SSH / HOST KEY" Width="560" Height="370" MinWidth="520" MinHeight="340"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{StaticResource CanvasBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI Variable Text">
+    <Grid Margin="18">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel><TextBlock x:Name="Heading" Text="// SSH / FIRST_CONNECTION" FontFamily="Cascadia Code" FontSize="10" Foreground="{StaticResource AccentBrush}"/><TextBlock x:Name="TitleText" Text="核验服务器身份" FontSize="19" FontWeight="SemiBold" Margin="0,5,0,0"/><TextBlock x:Name="Target" Foreground="{StaticResource MutedBrush}" FontFamily="Cascadia Code" FontSize="10" Margin="0,4,0,0"/></StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,18,0,10">
+            <TextBlock Text="请通过可信渠道核对下方 SHA256 指纹。只有确认它属于目标服务器后，才选择信任。" TextWrapping="Wrap" FontSize="11" />
+            <TextBlock x:Name="PreviousLabel" Text="之前记录的指纹" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,14,0,4" Visibility="Collapsed" />
+            <Border x:Name="PreviousPanel" Background="#211B1C" BorderBrush="#8C4744" BorderThickness="1" Padding="8" Visibility="Collapsed"><TextBlock x:Name="PreviousFingerprint" FontFamily="Cascadia Code" FontSize="10" TextWrapping="Wrap" /></Border>
+            <TextBlock Text="当前服务器指纹" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,12,0,4" />
+            <Border Background="#111015" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Padding="9"><TextBlock x:Name="CurrentFingerprint" FontFamily="Cascadia Code" FontSize="11" TextWrapping="Wrap" /></Border>
+            <TextBlock x:Name="Warning" Text="首次连接会记录此指纹。" Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,10,0,0" />
+        </StackPanel>
+        <DockPanel Grid.Row="2"><TextBlock Text="拒绝将中止 SSH 连接。" Foreground="{StaticResource MutedBrush}" FontSize="9" VerticalAlignment="Center"/><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="拒绝 [ ESC ]" IsCancel="True" Background="Transparent" Foreground="{StaticResource MutedBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Padding="10,6" Margin="0,0,6,0"/><Button x:Name="TrustButton" Content="信任并继续" Click="Trust_Click" Background="{StaticResource AccentBrush}" Foreground="#17151A" BorderThickness="0" Padding="12,6" FontWeight="SemiBold"/></StackPanel></DockPanel>
+    </Grid>
+</Window>

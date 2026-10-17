@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\OnlyShell.Core\OnlyShell.Core.csproj" />
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+</Project>

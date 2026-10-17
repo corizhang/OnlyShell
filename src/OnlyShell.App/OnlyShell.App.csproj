@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>OnlyShell</AssemblyName>
+    <RootNamespace>OnlyShell.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OnlyShell.Presentation\OnlyShell.Presentation.csproj" />
+    <ProjectReference Include="..\OnlyShell.Infrastructure.Data\OnlyShell.Infrastructure.Data.csproj" />
+    <ProjectReference Include="..\OnlyShell.Infrastructure.Ssh\OnlyShell.Infrastructure.Ssh.csproj" />
+    <ProjectReference Include="..\OnlyShell.Infrastructure.Secrets\OnlyShell.Infrastructure.Secrets.csproj" />
+    <ProjectReference Include="..\OnlyShell.Infrastructure.Sync\OnlyShell.Infrastructure.Sync.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+  </ItemGroup>
+</Project>

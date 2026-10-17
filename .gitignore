@@ -1,0 +1,24 @@
+# Build output
+**/bin/
+**/obj/
+.vs/
+.idea/
+
+# User-specific IDE files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local runtime data and diagnostics
+data/
+logs/
+*.log
+
+# Generated packages
+*.nupkg
+*.snupkg
+
+# OS noise
+Thumbs.db
+Desktop.ini

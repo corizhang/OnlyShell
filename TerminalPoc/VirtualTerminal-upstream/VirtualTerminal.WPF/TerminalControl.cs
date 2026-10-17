@@ -1,0 +1,1305 @@
+using System.Diagnostics;
+using System.Text;
+using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
+using VirtualTerminal.Automation;
+using VirtualTerminal.Buffer;
+using VirtualTerminal.Cursors;
+using VirtualTerminal.Extensions;
+using VirtualTerminal.Helpers;
+using VirtualTerminal.Input;
+using VirtualTerminal.Interfaces;
+using VirtualTerminal.Interop;
+using VirtualTerminal.Model;
+using VirtualTerminal.Options;
+using VirtualTerminal.Rendering;
+using VirtualTerminal.Vt;
+using WindowsColor = System.Windows.Media.Color;
+
+namespace VirtualTerminal;
+
+/// <summary>
+/// WPF control that renders a <see cref="ITerminalSession"/> using a fixed-size terminal grid
+/// (size is derived from the control bounds). Scrolling is performed against the scrollback
+/// buffer, not by scrolling a huge child element.
+/// </summary>
+public partial class TerminalControl : Control, IDisposable
+{
+    private readonly TerminalRenderer _renderer = new();
+    private readonly TerminalOptions _options = new();
+    private TerminalCursorRenderer _cursorRenderer = new DefaultTerminalCursorRenderer();
+
+    private readonly object _invalidateLock = new object();
+    private readonly DispatcherTimer _renderTimer;
+    private readonly DispatcherTimer _resizeTimer;
+
+    private TerminalDecoder? _decoder;
+    private int _lastCursorX = -1;
+    private int _lastCursorY = -1;
+    private bool _rendererConfigured;
+    private bool _invalidatePending;
+    private bool _disposed;
+
+    // Text selection (mouse drag).
+    private TerminalSelection? _selection;
+    private bool _isSelecting = false;
+    private Point _selectStart = new Point(0, 0);
+
+    // When the running app has enabled xterm mouse tracking (e.g. claude in fullscreen
+    // mode), mouse events are forwarded to it instead of being used for local selection
+    // and scrollback navigation. Holds the button currently held by the user while
+    // forwarding, so motion and release can be reported in button-event mode.
+    private TerminalMouseButton? _trackedButton;
+
+    // Scrollback navigation (mouse wheel). 0 = live at the bottom; >0 = rows scrolled back into history.
+    private int _scrollOffset;
+    private const int ScrollWheelLines = 3;
+
+    // Sanity limits for the terminal grid. Sizes below this (especially 1 column)
+    // make ConPTY and most shells behave badly (reset/crash).
+    private const int MinimumColumns = 10;
+    private const int MinimumRows = 3;
+
+    // After a resize, suppress intermediate renders for a short time so ConPTY's
+    // reflow output can accumulate and we show the final frame instead of partial/blank states.
+    private DateTime _suppressRenderUntil = DateTime.MinValue;
+    private static readonly TimeSpan ResizeRenderSuppression = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>Copies the current selection to the clipboard.</summary>
+    public static readonly RoutedUICommand CopyCommand = new RoutedUICommand("Copy", "Copy", typeof(TerminalControl));
+
+    /// <summary>Pastes the clipboard content into the session.</summary>
+    public static readonly RoutedUICommand PasteCommand = new RoutedUICommand("Paste", "Paste", typeof(TerminalControl));
+
+    /// <summary>Selects the whole visible screen.</summary>
+    public static readonly RoutedUICommand SelectAllCommand = new RoutedUICommand("Select All", "SelectAll", typeof(TerminalControl));
+
+    /// <summary>Clears the terminal screen and scrollback.</summary>
+    public static readonly RoutedUICommand ClearCommand = new RoutedUICommand("Clear", "Clear", typeof(TerminalControl));
+
+    private SolidColorBrush _foregroundBrush = new SolidColorBrush(Colors.White);
+    private SolidColorBrush _backgroundBrush = new SolidColorBrush(Colors.Black);
+
+    /// <summary>
+    /// Gets or sets the active <see cref="ITerminalSession"/> displayed by this control.
+    /// </summary>
+    public ITerminalSession? Session
+    {
+        get => (ITerminalSession?)GetValue(SessionProperty);
+        set => SetValue(SessionProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the renderer that draws the terminal cursor. Swap this to customize the
+    /// cursor visual or animate its movement; defaults to <see cref="DefaultTerminalCursorRenderer"/>.
+    /// </summary>
+    public TerminalCursorRenderer CursorRenderer
+    {
+        get => _cursorRenderer;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (ReferenceEquals(_cursorRenderer, value))
+                return;
+
+            bool attached = _cursorRenderer.TerminalControl is not null;
+            _cursorRenderer.Detach();
+            _cursorRenderer = value;
+            if (attached)
+                _cursorRenderer.Attach(this);
+
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether this control should forward keyboard input directly into the session.
+    /// </summary>
+    public bool AllowDirectInput
+    {
+        get => (bool)GetValue(AllowDirectInputProperty);
+        set => SetValue(AllowDirectInputProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets whether the floating "scroll to bottom" button is enabled.
+    /// </summary>
+    public bool ScrollDownVisible
+    {
+        get => (bool)GetValue(ScrollDownVisibleProperty);
+        set => SetValue(ScrollDownVisibleProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the terminal background color.
+    /// </summary>
+    public WindowsColor ScreenBackground
+    {
+        get => (WindowsColor)GetValue(ScreenBackgroundProperty);
+        set => SetValue(ScreenBackgroundProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the terminal foreground color.
+    /// </summary>
+    public WindowsColor ScreenForeground
+    {
+        get => (WindowsColor)GetValue(ScreenForegroundProperty);
+        set => SetValue(ScreenForegroundProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the cursor is visible.
+    /// </summary>
+    public bool CursorVisible
+    {
+        get => (bool)GetValue(CursorVisibleProperty);
+        set => SetValue(CursorVisibleProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum number of scrollback lines retained.
+    /// </summary>
+    public int ScrollbackLines
+    {
+        get => (int)GetValue(ScrollbackLinesProperty);
+        set => SetValue(ScrollbackLinesProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the line height multiplier (1.0 = default).
+    /// </summary>
+    public double LineHeight
+    {
+        get => (double)GetValue(LineHeightProperty);
+        set => SetValue(LineHeightProperty, value);
+    }
+
+    /// <summary>
+    /// Gets the rendered output as text (reserved for higher-level usages).
+    /// </summary>
+    public string OutputText
+    {
+        get => (string)GetValue(OutputTextProperty);
+        private set => SetValue(OutputTextProperty, value);
+    }
+
+    /// <summary>
+    /// Gets whether the viewport is pinned to the live bottom.
+    /// </summary>
+    public bool AutoScrolling
+    {
+        get => (bool)GetValue(AutoScrollingProperty);
+        private set => SetValue(AutoScrollingProperty, value);
+    }
+
+    /// <summary>
+    /// Gets the encoding used by the underlying session.
+    /// </summary>
+    public Encoding? Encoding
+    {
+        get => Session?.InputEncoding;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TerminalControl"/> control.
+    /// </summary>
+    public TerminalControl()
+    {
+        Debug.WriteLine($"[{GetType().Name}] Constructor");
+        _renderTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Background, DispatcherRenderHandler, Dispatcher);
+        _resizeTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Background, (s, e) => { _resizeTimer!.Stop(); ResizeSessionToBounds(); }, Dispatcher);
+
+        Focusable = true;
+        Loaded += OnControlLoaded;
+        Unloaded += OnControlUnloaded;
+
+        CommandBindings.Add(new CommandBinding(CopyCommand,
+            (s, e) => { _ = CopySelectionToClipboardAsync(); e.Handled = true; },
+            (s, e) => { e.CanExecute = _selection is not null; e.Handled = true; }));
+        CommandBindings.Add(new CommandBinding(PasteCommand,
+            (s, e) => { _ = PasteFromClipboardAsync(); e.Handled = true; },
+            (s, e) => { e.CanExecute = Session is not null; e.Handled = true; }));
+        CommandBindings.Add(new CommandBinding(SelectAllCommand,
+            (s, e) => { SelectAll(); e.Handled = true; },
+            (s, e) => { e.CanExecute = _decoder is not null; e.Handled = true; }));
+        CommandBindings.Add(new CommandBinding(ClearCommand,
+            (s, e) => { Clear(); e.Handled = true; },
+            (s, e) => { e.CanExecute = _decoder is not null; e.Handled = true; }));
+
+        _renderTimer.Start();
+    }
+
+    /// <inheritdoc />
+    protected override AutomationPeer OnCreateAutomationPeer()
+        => new TerminalControlAutomationPeer(this);
+
+    // ---- Property change handling ----
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (e.Property == SessionProperty)
+        {
+            Debug.WriteLine($"[{GetType().Name}] SessionProperty changed: old={e.OldValue?.GetType().Name ?? "null"}, new={e.NewValue?.GetType().Name ?? "null"}, rendererConfigured={_rendererConfigured}");
+            if (e.OldValue is ITerminalSession oldSession)
+            {
+                oldSession.BufferUpdated -= OnSessionBufferUpdated;
+
+                try
+                {
+                    if (oldSession.Decoder is TerminalDecoder oldDec)
+                    {
+                        oldDec.TitleChanged -= OnDecoderTitleChanged;
+                        oldDec.Bell -= OnDecoderBell;
+                        oldDec.NotificationReceived -= OnDecoderNotification;
+                        oldDec.ShellIntegrationMark -= OnDecoderShellIntegrationMark;
+                        oldDec.Iterm2Annotation -= OnDecoderIterm2Annotation;
+                        oldDec.ClipboardRequested -= OnDecoderClipboardRequested;
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+
+            _decoder = (e.NewValue as ITerminalSession)?.Decoder as TerminalDecoder;
+            if (_decoder is { } dec)
+            {
+                dec.Options = _options;
+                dec.TitleChanged += OnDecoderTitleChanged;
+                dec.Bell += OnDecoderBell;
+                dec.NotificationReceived += OnDecoderNotification;
+                dec.ShellIntegrationMark += OnDecoderShellIntegrationMark;
+                dec.Iterm2Annotation += OnDecoderIterm2Annotation;
+                dec.ClipboardRequested += OnDecoderClipboardRequested;
+            }
+
+            if (e.NewValue is ITerminalSession newSession)
+                newSession.BufferUpdated += OnSessionBufferUpdated;
+
+            SyncOptionsToDecoder();
+            ResizeSessionToBounds();
+            InvalidateVisual();
+        }
+        else if (e.Property == FontFamilyProperty || e.Property == FontSizeProperty || e.Property == LineHeightProperty)
+        {
+            ReconfigureRenderer();
+        }
+        else if (e.Property == ScreenBackgroundProperty || e.Property == ScreenForegroundProperty)
+        {
+            UpdateBrushes();
+            InvalidateVisual();
+        }
+        else if (e.Property == ScrollbackLinesProperty)
+        {
+            SyncOptionsToDecoder();
+            InvalidateVisual();
+        }
+        else if (e.Property == CursorVisibleProperty)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    private void UpdateBrushes()
+    {
+        _foregroundBrush = new SolidColorBrush(ScreenForeground);
+        _backgroundBrush = new SolidColorBrush(ScreenBackground);
+
+        _options.DefaultBackground = ScreenBackground.ToTerminalColor();
+        _options.DefaultForeground = ScreenForeground.ToTerminalColor();
+    }
+
+    private void InvalidateCommandState()
+        => CommandManager.InvalidateRequerySuggested();
+
+    /// <summary>Selects the entire visible screen.</summary>
+    public void SelectAll()
+    {
+        if (_decoder is null)
+            return;
+
+        _selection = new TerminalSelection(0, 0, _decoder.Buffer.Columns - 1, _decoder.Buffer.Rows - 1);
+        InvalidateCommandState();
+        InvalidateVisual();
+    }
+
+    /// <summary>Clears the terminal screen and moves the cursor to the home position.</summary>
+    public void Clear()
+    {
+        // Standard "clear screen + home" via escape sequences (decoded, not a direct buffer wipe).
+        _decoder?.Write("\x1b[2J\x1b[H"u8);
+    }
+
+    private void SyncOptionsToDecoder()
+    {
+        _options.ScrollbackMaxLines = ScrollbackLines;
+        _options.LineHeight = LineHeight;
+        _options.DefaultForeground = ScreenForeground.ToTerminalColor();
+        _options.DefaultBackground = ScreenBackground.ToTerminalColor();
+
+        Debug.WriteLine($"[{GetType().Name}] SyncOptionsToDecoder: ScrollbackLines={ScrollbackLines}, ScrollbackMaxLines={_options.ScrollbackMaxLines}");
+        if (_decoder?.Buffer is { } buf)
+        {
+            buf.SetScrollbackMax(_options.ScrollbackMaxLines);
+            Debug.WriteLine($"[{GetType().Name}] SyncOptionsToDecoder: buffer ScrollbackMax={buf.ScrollbackMax}, ScrollbackCount={buf.ScrollbackCount}");
+        }
+    }
+
+    private void OnDecoderTitleChanged(object? sender, string title)
+        => TitleChanged?.Invoke(this, title);
+
+    private void OnDecoderBell(object? sender, EventArgs e)
+        => Bell?.Invoke(this, e);
+
+    private void OnDecoderNotification(object? sender, string message)
+        => NotificationReceived?.Invoke(this, message);
+
+    private void OnDecoderShellIntegrationMark(object? sender, string arguments)
+        => ShellIntegrationMark?.Invoke(this, arguments);
+
+    private void OnDecoderIterm2Annotation(object? sender, string arguments)
+        => Iterm2Annotation?.Invoke(this, arguments);
+
+    private void OnDecoderClipboardRequested(object? sender, ClipboardRequestEventArgs e)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => OnDecoderClipboardRequested(sender, e));
+            return;
+        }
+
+        try
+        {
+            if (e.IsQuery)
+            {
+                string? text = Clipboard.GetText();
+                if (text is null)
+                    return;
+
+                string b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
+                Session?.Append($"\x1b]52;{e.Selection};{b64}\x07");
+            }
+            else
+            {
+                byte[] bytes = Convert.FromBase64String(e.Data!);
+                string text = Encoding.UTF8.GetString(bytes);
+                Clipboard.SetText(text);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[{GetType().Name}] Clipboard request failed: {ex}");
+        }
+    }
+
+    // ---- Lifecycle ----
+    // WPF raises Unloaded whenever the control leaves the visual tree, which is not
+    // necessarily the end of its life: the same instance can be reattached (reparenting,
+    // template re-application, window content swap) and must keep rendering. So Unloaded
+    // only parks the control (stops the dispatcher timers, which is what would otherwise
+    // keep it alive while detached); tearing down the renderer is the owner's job, through
+    // Dispose. Disposing here left _rendererConfigured true with a disposed GlyphCache and
+    // every later OnRender threw "GlyphCache not configured".
+    private void OnControlLoaded(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine($"[{GetType().Name}] Loaded: Actual={ActualWidth}x{ActualHeight}, RenderSize={RenderSize}, disposed={_disposed}");
+        if (_disposed)
+            return;
+
+        _renderTimer.Start();
+        _cursorRenderer.Attach(this);
+    }
+
+    private void OnControlUnloaded(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine($"[{GetType().Name}] Unloaded: disposed={_disposed}");
+        _renderTimer.Stop();
+        _resizeTimer.Stop();
+        _cursorRenderer.Detach();
+    }
+
+    /// <inheritdoc />
+    protected override void OnRender(DrawingContext context)
+    {
+        Debug.WriteLine($"[{GetType().Name}] OnRender: decoder={_decoder is not null}, configured={_rendererConfigured}, RenderSize={RenderSize}");
+        try
+        {
+            //base.OnRender(context);
+            DrawTerminal(context);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[{GetType().Name}] OnRender EXCEPTION: {ex}");
+            throw;
+        }
+    }
+
+    private void DrawTerminal(DrawingContext context)
+    {
+        if (_decoder is null || !_rendererConfigured)
+        {
+            context.DrawRectangle(_backgroundBrush, null, new Rect(RenderSize));
+            return;
+        }
+
+        Size cell = _renderer.CellSize;
+        double padLeft = Padding.Left;
+        double padTop = Padding.Top;
+        double padRight = Padding.Right;
+        double padBottom = Padding.Bottom;
+
+        context.PushTransform(new TranslateTransform(padLeft, padTop));
+
+        Rect contentRect = new(0, 0, Math.Max(0, RenderSize.Width - padLeft - padRight), Math.Max(0, RenderSize.Height - padTop - padBottom));
+        context.DrawRectangle(_backgroundBrush, null, contentRect);
+
+        lock (_decoder.Buffer.SyncRoot)
+        {
+            RenderFullBuffer(context);
+        }
+
+        context.Pop();
+    }
+
+    private void RenderFullBuffer(DrawingContext drawingContext)
+    {
+        if (_decoder is null)
+            return;
+
+        TerminalScreenBuffer buf = _decoder.Buffer;
+        IReadOnlyList<TerminalRow>? scrollback = _scrollOffset > 0 ? buf.GetScrollback() : null;
+
+        int rows = buf.Rows;
+        Size cell = _renderer.CellSize;
+        float pixelsPerDip = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+        for (int y = 0; y < rows; y++)
+        {
+            drawingContext.PushTransform(new TranslateTransform(0, y * cell.Height));
+            Span<TerminalCellInfo> cells = GetRowCells(buf, scrollback, y);
+
+            _renderer.RenderRow(drawingContext, cells, _selection, y, pixelsPerDip);
+            drawingContext.Pop();
+        }
+
+        RenderCursorVisual(drawingContext);
+        for (int i = 0; i < buf.Rows; i++)
+            buf.MarkRowClean(i);
+    }
+
+    private Span<TerminalCellInfo> GetRowCells(TerminalScreenBuffer buf, IReadOnlyList<TerminalRow>? scrollback, int viewportRow)
+    {
+        if (scrollback is null || scrollback.Count == 0)
+            return buf.GetRow(viewportRow);
+
+        int streamLen = scrollback.Count + buf.Rows;
+        int top = scrollback.Count - _scrollOffset;
+        int idx = top + viewportRow;
+
+        if (idx < 0 || idx >= streamLen)
+            return [];
+
+        return idx < scrollback.Count ? scrollback[idx].AsSpan() : buf.GetRow(idx - scrollback.Count);
+    }
+
+    private void RenderCursorVisual(DrawingContext drawingContext)
+    {
+        if (_decoder is null)
+            return;
+
+        TerminalState state = _decoder.State;
+        Size cell = _renderer.CellSize;
+
+        if (state.CursorX != _lastCursorX || state.CursorY != _lastCursorY)
+        {
+            _lastCursorX = state.CursorX;
+            _lastCursorY = state.CursorY;
+            _cursorRenderer.MoveTo(new Rect(
+                state.CursorX * cell.Width,
+                state.CursorY * cell.Height,
+                cell.Width,
+                cell.Height));
+        }
+
+        _cursorRenderer.IsCursorVisible = IsFocused && _scrollOffset == 0 && state.Modes.CursorVisible && CursorVisible;
+        _cursorRenderer.CursorBlinkMode = state.Modes.CursorBlink;
+        _cursorRenderer.BackgroundColor = ScreenBackground;
+        _cursorRenderer.Render(drawingContext);
+    }
+
+    private void DispatcherRenderHandler(object? sender, EventArgs e)
+    {
+        if (DateTime.UtcNow < _suppressRenderUntil)
+            return;
+
+        TerminalDecoder? dec = _decoder;
+        if (dec is null)
+            return;
+
+        TerminalScreenBuffer buf = dec.Buffer;
+        bool dirty;
+        lock (buf.SyncRoot)
+            dirty = buf.HasDirtyRows;
+
+        if (dirty || _selection is not null || _scrollOffset > 0)
+            InvalidateVisual();
+    }
+
+    // ---- Renderer configuration ----
+    private void ReconfigureRenderer()
+    {
+        try
+        {
+            Debug.WriteLine($"[{GetType().Name}] ReconfigureRenderer: font={FontFamily.Source}, size={FontSize}");
+            SyncOptionsToDecoder();
+            _renderer.Configure(FontFamily.Source, FontSize, _options);
+            _rendererConfigured = true;
+            Debug.WriteLine($"[{GetType().Name}] ReconfigureRenderer succeeded");
+
+            ResizeSessionToBounds();
+            InvalidateVisual();
+        }
+        catch (Exception ex)
+        {
+            _rendererConfigured = false;
+            Debug.WriteLine($"[{GetType().Name}] ReconfigureRenderer failed: {ex.Message}");
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        Debug.WriteLine($"[{GetType().Name}] OnRenderSizeChanged: old={sizeInfo.PreviousSize}, new={sizeInfo.NewSize}, Actual={ActualWidth}x{ActualHeight}, rendererConfigured={_rendererConfigured}");
+        base.OnRenderSizeChanged(sizeInfo);
+
+        // Debounce rapid resize events. ConPTY reflow is expensive and produces garbage
+        // if we call it for every intermediate pixel change.
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
+    }
+
+    private void ResizeSessionToBounds()
+    {
+        Size renderSize = RenderSize;
+        Debug.WriteLine($"[{GetType().Name}] ResizeSessionToBounds: decoder={_decoder is not null}, configured={_rendererConfigured}, RenderSize={renderSize}, Actual={ActualWidth}x{ActualHeight}");
+        if (_decoder is null || !_rendererConfigured)
+            return;
+
+        if (renderSize.Width <= 0 || renderSize.Height <= 0)
+        {
+            Debug.WriteLine($"[{GetType().Name}] ResizeSessionToBounds: render size is zero/negative, skipping");
+            return;
+        }
+
+        Size cell = _renderer.CellSize;
+        if (cell.Width <= 0 || cell.Height <= 0)
+        {
+            Debug.WriteLine($"[{GetType().Name}] ResizeSessionToBounds: cell size is zero/negative, skipping");
+            return;
+        }
+
+        double availW = Math.Max(0, renderSize.Width - Padding.Left - Padding.Right);
+        double availH = Math.Max(0, renderSize.Height - Padding.Top - Padding.Bottom);
+        ushort cols = (ushort)Math.Max(MinimumColumns, Math.Floor(availW / cell.Width));
+        ushort rows = (ushort)Math.Max(MinimumRows, Math.Floor(availH / cell.Height));
+
+        Debug.WriteLine($"[{GetType().Name}] ResizeSessionToBounds: cell={cell.Width}x{cell.Height}, cols={cols}, rows={rows}, current={_decoder.Buffer.Columns}x{_decoder.Buffer.Rows}");
+        if (_decoder.Buffer.Columns != cols || _decoder.Buffer.Rows != rows)
+        {
+            Debug.WriteLine($"[{GetType().Name}] ResizeSessionToBounds: resizing session to {cols}x{rows}");
+
+            int oldRows = _decoder.Buffer.Rows;
+            Session?.Resize(cols, rows);
+
+            // If the user is scrolled back and the height shrank, keep the same logical line
+            // at the top of the viewport instead of jumping down. Expansion leaves offset unchanged.
+            if (_scrollOffset > 0 && rows < oldRows)
+            {
+                int lost = oldRows - rows;
+                _scrollOffset = Math.Clamp(_scrollOffset + lost, 0, _decoder.Buffer.ScrollbackCount);
+            }
+
+            _suppressRenderUntil = DateTime.UtcNow + ResizeRenderSuppression;
+
+            if (DateTime.UtcNow >= _suppressRenderUntil)
+                InvalidateVisual();
+        }
+    }
+
+    // ---- Focus ----
+    /// <inheritdoc />
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnGotKeyboardFocus(e);
+        if (_decoder?.State.Modes.FocusReporting == true)
+            Session?.Append("\x1b[I");
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc />
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnLostKeyboardFocus(e);
+        if (_decoder?.State.Modes.FocusReporting == true)
+            Session?.Append("\x1b[O");
+        InvalidateVisual();
+    }
+
+    // ---- Keyboard input ----
+    /// <inheritdoc />
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (_decoder is null || e.Handled || !AllowDirectInput)
+            return;
+
+        if (_scrollOffset > 0)
+            ScrollToBottom();
+
+        // With Alt pressed, WPF sets e.Key = Key.System and the actual key in e.SystemKey
+        // (and also does not trigger TextInput; see below). Without this, any
+        // combination involving Alt would be ignored: e.Key=System -> ToTerminalKey -> None.
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        ModifierKeys mods = Keyboard.Modifiers;
+
+        // Ctrl+Shift+C always copies the current selection.
+        if (key == Key.C && (mods & ModifierKeys.Control) != 0 && (mods & ModifierKeys.Shift) != 0)
+        {
+            _ = CopySelectionToClipboardAsync();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+V pastes clipboard content into the session.
+        if (key == Key.V && (mods & ModifierKeys.Control) != 0)
+        {
+            _ = PasteFromClipboardAsync();
+            e.Handled = true;
+            return;
+        }
+
+        // Any other input clears the selection.
+        if (_selection is not null)
+        {
+            _selection = null;
+            InvalidateCommandState();
+            InvalidateVisual();
+        }
+
+        if (_scrollOffset > 0)
+            ScrollToBottom();
+
+        TerminalKey terminalKey = ToTerminalKey(key);
+        TerminalModifier terminalMods = ToTerminalModifier(mods);
+
+        string? keySequence = KeyboardEncoder.Encode(terminalKey, terminalMods, in _decoder.State.Modes);
+        if (keySequence is not null)
+        {
+            Session?.Append(keySequence);
+            e.Handled = true;
+            return;
+        }
+
+        // Left Alt + printable character: WPF does NOT trigger TextInput when Alt
+        // is pressed (it treats it as a menu mnemonic), so character keys
+        // combined with Alt never arrive via the text input path. The xterm convention
+        // for Meta is ESC + base character. AltGr is excluded (Right Alt, which Windows
+        // reports as Ctrl+Alt): that DOES produce TextInput with the
+        // alternate character (e.g., AltGr+2 = @) and is already handled by OnPreviewTextInput,
+        // so it is left alone here. Alt+Ctrl combinations are also excluded (not pure Meta).
+        bool leftAlt = (mods & ModifierKeys.Alt) != 0
+            && (mods & ModifierKeys.Control) == 0
+            && !KeyHelper.IsRightAltPressed();
+
+        if (leftAlt && !KeyHelper.IsModifier(key))
+        {
+            string? ch = KeyHelper.GetCharFromKey(key, ignoreAlt: true);
+            if (!string.IsNullOrEmpty(ch))
+            {
+                Session?.Append("\x1b" + ch);
+                e.Handled = true;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPreviewTextInput(TextCompositionEventArgs e)
+    {
+        base.OnPreviewTextInput(e);
+        if (string.IsNullOrEmpty(e.Text) || _decoder is null || !AllowDirectInput)
+            return;
+
+        if (_selection is not null)
+        {
+            _selection = null;
+            InvalidateCommandState();
+            InvalidateVisual();
+        }
+
+        if (_scrollOffset > 0)
+            ScrollToBottom();
+
+        Session?.Append(e.Text);
+        e.Handled = true;
+    }
+
+    private static TerminalKey ToTerminalKey(Key key) => key switch
+    {
+        Key.Enter => TerminalKey.Enter,
+        Key.Back => TerminalKey.Back,
+        Key.Tab => TerminalKey.Tab,
+        Key.Escape => TerminalKey.Escape,
+        Key.Up => TerminalKey.Up,
+        Key.Down => TerminalKey.Down,
+        Key.Right => TerminalKey.Right,
+        Key.Left => TerminalKey.Left,
+        Key.Home => TerminalKey.Home,
+        Key.Insert => TerminalKey.Insert,
+        Key.Delete => TerminalKey.Delete,
+        Key.End => TerminalKey.End,
+        Key.PageUp => TerminalKey.PageUp,
+        Key.PageDown => TerminalKey.PageDown,
+        Key.F1 => TerminalKey.F1,
+        Key.F2 => TerminalKey.F2,
+        Key.F3 => TerminalKey.F3,
+        Key.F4 => TerminalKey.F4,
+        Key.F5 => TerminalKey.F5,
+        Key.F6 => TerminalKey.F6,
+        Key.F7 => TerminalKey.F7,
+        Key.F8 => TerminalKey.F8,
+        Key.F9 => TerminalKey.F9,
+        Key.F10 => TerminalKey.F10,
+        Key.F11 => TerminalKey.F11,
+        Key.F12 => TerminalKey.F12,
+        _ => TerminalKey.None,
+    };
+
+    private static TerminalModifier ToTerminalModifier(ModifierKeys modifiers)
+    {
+        TerminalModifier result = TerminalModifier.None;
+        if ((modifiers & ModifierKeys.Shift) != 0)
+            result |= TerminalModifier.Shift;
+
+        if ((modifiers & ModifierKeys.Alt) != 0)
+            result |= TerminalModifier.Alt;
+
+        if ((modifiers & ModifierKeys.Control) != 0)
+            result |= TerminalModifier.Control;
+
+        if ((modifiers & ModifierKeys.Windows) != 0)
+            result |= TerminalModifier.Meta;
+
+        return result;
+    }
+
+    // ---- Mouse forwarding (xterm mouse tracking) ----
+    // Real terminals hand wheel/click/drag to the app when it has enabled xterm mouse
+    // reporting (DECSET 1000/1002/1003). Without this, a TUI like claude (fullscreen mode)
+    // never receives the events: the wheel would scroll an empty primary scrollback and
+    // clicks would start a local selection the app cannot see.
+    private bool IsMouseReporting()
+        => _decoder is not null && _decoder.State.Modes.MouseTracking != MouseTrackingMode.Off;
+
+    // Shift bypasses tracking (xterm/Windows Terminal behavior): holding Shift keeps the
+    // local selection/scrollback so the user can still copy text from a TUI that owns the mouse.
+    private static bool ShouldForwardToApp(bool reporting, ModifierKeys modifiers)
+        => reporting && (modifiers & ModifierKeys.Shift) == 0;
+
+    private static TerminalMouseButton MapMouseButton(MouseButton button) => button switch
+    {
+        MouseButton.Left => TerminalMouseButton.Left,
+        MouseButton.Middle => TerminalMouseButton.Middle,
+        MouseButton.Right => TerminalMouseButton.Right,
+        MouseButton.XButton1 => TerminalMouseButton.XButton1,
+        MouseButton.XButton2 => TerminalMouseButton.XButton2,
+        _ => TerminalMouseButton.None,
+    };
+
+    /// <summary>True when motion reports must be sent under the current tracking mode.</summary>
+    private bool ShouldReportMotion()
+    {
+        if (_decoder is null)
+            return false;
+
+        MouseTrackingMode mode = _decoder.State.Modes.MouseTracking;
+        // Any-event reports motion with or without a held button; button-event only while dragging.
+        return mode == MouseTrackingMode.AnyEvent || (mode == MouseTrackingMode.ButtonEvent && _trackedButton is not null);
+    }
+
+    // ---- Mouse selection ----
+    /// <inheritdoc />
+    protected override void OnMouseDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (_decoder is null)
+            return;
+
+        Focus();
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        TerminalMouseButton mappedButton = MapMouseButton(e.ChangedButton);
+        if (ShouldForwardToApp(IsMouseReporting(), modifiers) && mappedButton != TerminalMouseButton.None)
+        {
+            Point cell = GetCellPosition(e);
+            if (cell.X < 0)
+                return;
+
+            _trackedButton = mappedButton;
+            Session?.Append(MouseEncoder.EncodeButton(mappedButton, pressed: true, (int)cell.X, (int)cell.Y,
+                ToTerminalModifier(modifiers), _decoder.State.Modes.SgrMouseEncoding));
+            e.Handled = true;
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            Point p = GetCellPosition(e);
+            if (p.X < 0)
+                return;
+
+            _isSelecting = true;
+            _selectStart = p;
+            _selection = new TerminalSelection((int)p.X, (int)p.Y, (int)p.X, (int)p.Y);
+            CaptureMouse();
+            InvalidateCommandState();
+            InvalidateVisual();
+        }
+        else if (e.ChangedButton == MouseButton.Right)
+        {
+            // If a context menu is explicitly assigned, let the framework open it.
+            if (ContextMenu is not null)
+                return;
+
+            e.Handled = true;
+
+            // Terminal-style right click: copy if something is selected, otherwise paste.
+            if (_selection is not null)
+            {
+                _ = CopySelectionToClipboardAsync();
+                _selection = null;
+                InvalidateCommandState();
+                InvalidateVisual();
+            }
+            else
+            {
+                _ = PasteFromClipboardAsync();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_decoder is null)
+            return;
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        if (ShouldForwardToApp(IsMouseReporting(), modifiers) && ShouldReportMotion())
+        {
+            Point cell = GetCellPosition(e);
+            if (cell.X < 0)
+                return;
+
+            Session?.Append(MouseEncoder.EncodeMotion(_trackedButton, (int)cell.X, (int)cell.Y,
+                ToTerminalModifier(modifiers), _decoder.State.Modes.SgrMouseEncoding));
+            e.Handled = true;
+            return;
+        }
+
+        if (!_isSelecting)
+            return;
+
+        Point p = GetCellPosition(e);
+        if (p.X < 0)
+            return;
+
+        _selection = new TerminalSelection((int)_selectStart.X, (int)_selectStart.Y, (int)p.X, (int)p.Y);
+        InvalidateCommandState();
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseUp(e);
+
+        if (_trackedButton is { } releasedButton)
+        {
+            // X10 only reports presses, never releases.
+            if (_decoder is not null && _decoder.State.Modes.MouseTracking != MouseTrackingMode.X10)
+            {
+                Point cell = GetCellPosition(e);
+                int x = cell.X < 0 ? 0 : (int)cell.X;
+                int y = cell.Y < 0 ? 0 : (int)cell.Y;
+                Session?.Append(MouseEncoder.EncodeButton(releasedButton, pressed: false, x, y,
+                    ToTerminalModifier(Keyboard.Modifiers), _decoder.State.Modes.SgrMouseEncoding));
+            }
+            _trackedButton = null;
+            e.Handled = true;
+            return;
+        }
+
+        if (!_isSelecting)
+            return;
+
+        _isSelecting = false;
+        ReleaseMouseCapture();
+
+        if (_selection is { } sel && (sel.StartY != sel.EndY || sel.StartX != sel.EndX))
+        {
+            _ = CopySelectionToClipboardAsync();
+            InvalidateCommandState();
+        }
+        else
+        {
+            // Plain click without drag: clear the empty/single-cell selection.
+            _selection = null;
+            InvalidateCommandState();
+            InvalidateVisual();
+        }
+    }
+
+    // ---- Scrollback navigation ----
+    /// <inheritdoc />
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnPreviewMouseWheel(e);
+        Debug.WriteLine($"[{GetType().Name}] OnPreviewMouseWheel: delta={e.Delta}, decoder={_decoder is not null}");
+        if (_decoder is null || e.Handled)
+            return;
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+
+        // Ctrl+wheel is zoom; leave it alone.
+        if ((modifiers & ModifierKeys.Control) != 0)
+            return;
+
+        int direction = e.Delta > 0 ? 1 : (e.Delta < 0 ? -1 : 0);
+        if (direction == 0)
+            return;
+
+        // When the app tracks the mouse, the wheel scrolls its content (e.g. claude's
+        // conversation) instead of the local scrollback.
+        if (ShouldForwardToApp(IsMouseReporting(), modifiers))
+        {
+            Point cell = GetCellPosition(e);
+            if (cell.X >= 0)
+                Session?.Append(MouseEncoder.EncodeWheel(up: direction > 0, (int)cell.X, (int)cell.Y,
+                    ToTerminalModifier(modifiers), _decoder.State.Modes.SgrMouseEncoding));
+            e.Handled = true;
+            return;
+        }
+
+        ScrollBy(direction * ScrollWheelLines);
+        e.Handled = true;
+    }
+
+    /// <summary>Scrolls the viewport by <paramref name="lines"/> (positive = up into history).</summary>
+    public void ScrollBy(int lines)
+    {
+        if (_decoder is null)
+            return;
+
+        int max = _decoder.Buffer.ScrollbackCount;
+        int next = Math.Clamp(_scrollOffset + lines, 0, max);
+        Debug.WriteLine($"[{GetType().Name}] ScrollBy: requested={lines}, max={max}, current={_scrollOffset}, next={next}");
+
+        if (next == _scrollOffset)
+            return;
+
+        _scrollOffset = next;
+        UpdateScrollDownVisibility();
+        InvalidateVisual();
+    }
+
+    /// <summary>Snaps the viewport back to the live bottom of the buffer.</summary>
+    public void ScrollToBottom()
+    {
+        if (_scrollOffset == 0)
+            return;
+
+        _scrollOffset = 0;
+        UpdateScrollDownVisibility();
+        InvalidateVisual();
+    }
+
+    private void UpdateScrollDownVisibility()
+    {
+        /*
+        if (PART_ScrollToBottomButton is null)
+            return;
+
+        PART_ScrollToBottomButton.Visibility = ScrollDownVisible && _scrollOffset > 0
+            ? Visibility.Visible : Visibility.Collapsed;
+        */
+    }
+
+    private void PART_ScrollToBottomButton_Click(object sender, RoutedEventArgs e)
+        => ScrollToBottom();
+
+    private Point GetCellPosition(MouseEventArgs e)
+    {
+        if (_decoder is null || !_rendererConfigured)
+            return new Point(-1, -1);
+
+        Size cell = _renderer.CellSize;
+        if (cell.Width <= 0 || cell.Height <= 0)
+            return new Point(-1, -1);
+
+        Point pt = e.GetPosition(this);
+        double x = (pt.X - Padding.Left) / cell.Width;
+        double y = (pt.Y - Padding.Top) / cell.Height;
+
+        int col = (int)Math.Clamp(Math.Floor(x), 0, _decoder.Buffer.Columns - 1);
+        int row = (int)Math.Clamp(Math.Floor(y), 0, _decoder.Buffer.Rows - 1);
+        return new Point(col, row);
+    }
+
+    private string? BuildSelectedText()
+    {
+        if (_decoder is null || _selection is not { } sel)
+            return null;
+
+        StringBuilder builder = new();
+        TerminalScreenBuffer buffer = _decoder.Buffer;
+        IReadOnlyList<TerminalRow>? scrollback = _scrollOffset > 0 ? buffer.GetScrollback() : null;
+
+        for (int y = sel.StartY; y <= sel.EndY; y++)
+        {
+            if (y < 0 || y >= buffer.Rows)
+                continue;
+
+            int x0 = y == sel.StartY ? sel.StartX : 0;
+            int x1 = y == sel.EndY ? sel.EndX : buffer.Columns - 1;
+            Span<TerminalCellInfo> row = GetRowCells(buffer, scrollback, y);
+
+            for (int x = x0; x <= x1 && x < row.Length; x++)
+            {
+                if (row[x].Style.Continuation)
+                    continue;
+
+                builder.Append(row[x].Character.ToString());
+            }
+
+            builder.Append('\n');
+        }
+
+        return builder.Length > 0
+            ? builder.ToString().TrimEnd('\n') : null;
+    }
+
+    private async Task CopySelectionToClipboardAsync()
+    {
+        string? text = BuildSelectedText();
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        Clipboard.SetText(text);
+        await Task.CompletedTask;
+    }
+
+    private async Task PasteFromClipboardAsync()
+    {
+        if (Session is null)
+            return;
+
+        string? text = Clipboard.GetText();
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        // Normalize line endings to CR so the terminal interprets them as Enter keys, and
+        // wrap with the bracketed-paste envelope if the terminal requested it (?2004h).
+        text = text.ReplaceLineEndings("\r");
+        bool bracketed = _decoder?.State.Modes.BracketedPaste == true;
+        Session.Append(KeyboardEncoder.WrapBracketedPaste(text, bracketed));
+        await Task.CompletedTask;
+    }
+
+    // ---- Session events ----
+    private void OnSessionBufferUpdated(object? sender, EventArgs e)
+    {
+        if (DateTime.UtcNow < _suppressRenderUntil)
+            return;
+
+        lock (_invalidateLock)
+        {
+            if (_invalidatePending)
+                return;
+
+            _invalidatePending = true;
+        }
+
+        Debug.WriteLine($"[{GetType().Name}] OnSessionBufferUpdated (thread={Environment.CurrentManagedThreadId}) -> scheduling invalidate");
+        Dispatcher.BeginInvoke(() =>
+        {
+            lock (_invalidateLock)
+                _invalidatePending = false;
+
+            Debug.WriteLine($"[{GetType().Name}] OnSessionBufferUpdated -> InvalidateVisual");
+            InvalidateVisual();
+
+            // Notify automation clients that the terminal text has changed.
+            if (UIElementAutomationPeer.FromElement(this) is TerminalControlAutomationPeer peer)
+                peer.UpdateText();
+
+            // Triggered after invalidation so the host reads the updated screen.
+            // Background level: do not delay rendering due to host scanning.
+            Dispatcher.BeginInvoke(() => ScreenUpdated?.Invoke(this, EventArgs.Empty), DispatcherPriority.Background);
+        }, DispatcherPriority.Render);
+    }
+
+    /// <summary>
+    /// Returns the text of the visible screen (main or
+    /// alternate buffer), one row per line, reading under the buffer lock. Used by
+    /// the host to search for sentinels (e.g., the pending question marker).
+    /// </summary>
+    public string GetVisibleScreenText()
+    {
+        if (_decoder is null)
+            return string.Empty;
+
+        TerminalScreenBuffer buf = _decoder.Buffer;
+        StringBuilder sb = new(buf.Rows * (buf.Columns + 1));
+        lock (buf.SyncRoot)
+        {
+            for (int y = 0; y < buf.Rows; y++)
+            {
+                Span<TerminalCellInfo> row = buf.GetRow(y);
+                for (int x = 0; x < row.Length; x++)
+                    sb.Append(row[x].Character.ToString());
+                sb.Append('\n');
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the full accessible text (scrollback + visible screen) for UI Automation.
+    /// </summary>
+    internal string GetAccessibleText()
+    {
+        if (_decoder is null)
+            return string.Empty;
+
+        TerminalScreenBuffer buf = _decoder.Buffer;
+        lock (buf.SyncRoot)
+            return buf.GetAllText();
+    }
+
+    // ---- Dispose ----
+    /// <summary>
+    /// Releases timers, unsubscribes from session events, and disposes the renderer.
+    /// Must be called by whoever owns the control (removing it from the visual tree is not
+    /// enough): the control is unusable afterwards and only paints its background.
+    /// </summary>
+    public void Dispose()
+    {
+        // Cleared before releasing the renderer: OnRender/DrawTerminal gate only on
+        // _rendererConfigured, so leaving it set would let a render that arrives after
+        // Dispose ask a released GlyphCache for glyphs.
+        _disposed = true;
+        _rendererConfigured = false;
+
+        _renderTimer.Stop();
+        _resizeTimer.Stop();
+        _cursorRenderer.Detach();
+
+        if (Session is { } session)
+        {
+            session.BufferUpdated -= OnSessionBufferUpdated;
+            if (session.Decoder is TerminalDecoder dec)
+            {
+                dec.TitleChanged -= OnDecoderTitleChanged;
+                dec.Bell -= OnDecoderBell;
+                dec.NotificationReceived -= OnDecoderNotification;
+                dec.ShellIntegrationMark -= OnDecoderShellIntegrationMark;
+                dec.Iterm2Annotation -= OnDecoderIterm2Annotation;
+                dec.ClipboardRequested -= OnDecoderClipboardRequested;
+            }
+
+            // Do not dispose, we do not own the session
+        }
+        _renderer.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Raised when the connected program changes the title (OSC 0/1/2).</summary>
+    public event EventHandler<string>? TitleChanged;
+
+    /// <summary>Raised on BEL.</summary>
+    public event EventHandler? Bell;
+
+    /// <summary>Raised when an OSC 9 desktop notification is received.</summary>
+    public event EventHandler<string>? NotificationReceived;
+
+    /// <summary>Raised when an OSC 133 shell-integration mark is received.</summary>
+    public event EventHandler<string>? ShellIntegrationMark;
+
+    /// <summary>Raised when an OSC 1337 iTerm2 annotation is received.</summary>
+    public event EventHandler<string>? Iterm2Annotation;
+
+    /// <summary>Raised on the UI thread after the session buffer has been updated with new
+    /// output (same tick that invalidates the visual). Lets the host scan the visible
+    /// screen for sentinels (e.g. a "pregunta pendiente" marker) without polling.</summary>
+    public event EventHandler? ScreenUpdated;
+
+    // ---- DependencyProperty registrations ----
+    /// <summary>Defines the <see cref="Session"/> dependency property.</summary>
+    public static readonly DependencyProperty SessionProperty = DependencyProperty.Register(
+        nameof(Session), typeof(ITerminalSession), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: null));
+
+    /// <summary>Defines the <see cref="AllowDirectInput"/> dependency property.</summary>
+    public static readonly DependencyProperty AllowDirectInputProperty = DependencyProperty.Register(
+        nameof(AllowDirectInput), typeof(bool), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: true));
+
+    /// <summary>Defines the <see cref="ScrollDownVisible"/> dependency property.</summary>
+    public static readonly DependencyProperty ScrollDownVisibleProperty = DependencyProperty.Register(
+        nameof(ScrollDownVisible), typeof(bool), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: true));
+
+    /// <summary>Defines the <see cref="ScreenBackground"/> dependency property.</summary>
+    public static readonly DependencyProperty ScreenBackgroundProperty = DependencyProperty.Register(
+        nameof(ScreenBackground), typeof(WindowsColor), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: Colors.Black));
+
+    /// <summary>Defines the <see cref="ScreenForeground"/> dependency property.</summary>
+    public static readonly DependencyProperty ScreenForegroundProperty = DependencyProperty.Register(
+        nameof(ScreenForeground), typeof(WindowsColor), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: Colors.White));
+
+    /// <summary>Defines the <see cref="CursorVisible"/> dependency property.</summary>
+    public static readonly DependencyProperty CursorVisibleProperty = DependencyProperty.Register(
+        nameof(CursorVisible), typeof(bool), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: true));
+
+    /// <summary>Defines the <see cref="ScrollbackLines"/> dependency property.</summary>
+    public static readonly DependencyProperty ScrollbackLinesProperty = DependencyProperty.Register(
+        nameof(ScrollbackLines), typeof(int), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: 10000));
+
+    /// <summary>Defines the <see cref="LineHeight"/> dependency property.</summary>
+    public static readonly DependencyProperty LineHeightProperty = DependencyProperty.Register(
+        nameof(LineHeight), typeof(double), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: 1.0));
+
+    /// <summary>Defines the <see cref="OutputText"/> dependency property.</summary>
+    public static readonly DependencyProperty OutputTextProperty = DependencyProperty.Register(
+        nameof(OutputText), typeof(string), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: string.Empty));
+
+    /// <summary>Defines the <see cref="AutoScrolling"/> dependency property.</summary>
+    public static readonly DependencyProperty AutoScrollingProperty = DependencyProperty.Register(
+        nameof(AutoScrolling), typeof(bool), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: true));
+}

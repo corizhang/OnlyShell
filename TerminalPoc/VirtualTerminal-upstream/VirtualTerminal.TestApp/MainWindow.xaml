@@ -1,0 +1,59 @@
+<Window x:Class="VirtualTerminal.TestApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:VirtualTerminal.TestApp"
+        xmlns:vt="clr-namespace:VirtualTerminal;assembly=VirtualTerminal.WPF"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="30"/>
+        </Grid.RowDefinitions>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" BorderBrush="Gray" BorderThickness="1" CornerRadius="5" Margin="5">
+            <DockPanel>
+                <TextBlock
+                    Text="CMD : "
+                    VerticalAlignment="Center"
+                    Margin="5,0,0,0"/>
+
+                <Button
+                    DockPanel.Dock="Right"
+                    Content="Invalidate"
+                    Click="Button_Click_Invalidate"/>
+
+                <Button
+                    DockPanel.Dock="Right"
+                    Content="Start"
+                    Click="Button_Click_Start"/>
+
+                <TextBox
+                    x:Name="PART_CommandLineName"
+                    VerticalContentAlignment="Center"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Text="powershell.exe"/>
+            </DockPanel>
+        </Border>
+        
+        <vt:TerminalControl 
+            x:Name="PART_Terminal_Left"
+            Grid.Row="1" Grid.Column="0"
+            AllowDirectInput="True"
+            Background="Black"
+            FontFamily="Cascadia Mono"/>
+
+        <vt:PromptBox
+            x:Name="PART_Prompt_Left"
+            Grid.Row="2" Grid.Column="0"
+            Prompt=">"/>
+    </Grid>
+</Window>
