@@ -15,8 +15,6 @@ namespace OnlyShell.App;
 
 public partial class MainWindow : Window
 {
-    private Point _dragStartPoint;
-    private bool _driveSelectionReady;
     private readonly WorkspaceViewModel _viewModel;
 
     public MainWindow(WorkspaceViewModel viewModel)
@@ -28,8 +26,6 @@ public partial class MainWindow : Window
         ScriptCodeEditor.Text = _viewModel.ScriptContent;
         UpdateScriptEditorHighlighting();
     }
-
-    private void MainWindow_Loaded(object sender, RoutedEventArgs e) => _driveSelectionReady = true;
 
     private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -113,103 +109,47 @@ public partial class MainWindow : Window
             FocusActiveTerminal();
     }
 
-    private void RemoteFiles_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private async void Hosts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (_viewModel.OpenRemoteDirectoryCommand.CanExecute(null))
-            _viewModel.OpenRemoteDirectoryCommand.Execute(null);
+        if (sender is ListBox { SelectedItem: OnlyShell.Core.Hosts.HostProfile host })
+            await _viewModel.OpenHostTerminalCommand.ExecuteAsync(host);
     }
 
-    private void RemoteFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void QuickConnectHosts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListView list)
-            _viewModel.SetSelectedRemoteFiles(list.SelectedItems.OfType<OnlyShell.Core.Files.RemoteFileEntry>());
+        if (sender is ListView { SelectedItem: OnlyShell.Core.Hosts.HostProfile host })
+            await _viewModel.OpenHostTerminalCommand.ExecuteAsync(host);
     }
 
-    private void LocalFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void SplitQuickConnectHosts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListView list)
-        {
-            _viewModel.SetSelectedLocalFiles(list.SelectedItems.OfType<OnlyShell.Core.Files.RemoteFileEntry>());
-            _viewModel.SelectedLocalEntry = list.SelectedItem as OnlyShell.Core.Files.RemoteFileEntry;
-        }
+        if (sender is ListView { SelectedItem: OnlyShell.Core.Hosts.HostProfile host, Tag: TerminalTabViewModel placeholder })
+            await _viewModel.OpenHostInSplitTabCommand.ExecuteAsync(
+                new WorkspaceViewModel.SplitHostConnectionRequest(host, placeholder));
     }
 
-    private void LocalFiles_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private void SplitTabHeader_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (_viewModel.OpenLocalDirectoryCommand.CanExecute(null))
-            _viewModel.OpenLocalDirectoryCommand.Execute(null);
-    }
-
-    private void LocalDrive_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_driveSelectionReady && sender is ComboBox { SelectedItem: string drive })
-            _viewModel.SwitchLocalDrive(drive);
-    }
-
-    private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
-        _dragStartPoint = e.GetPosition(null);
-
-    private void LocalFiles_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton != MouseButtonState.Pressed || sender is not ListView list
-            || list.SelectedItems.Count == 0)
-            return;
-        var position = e.GetPosition(null);
-        if (Math.Abs(position.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(position.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        if (e.LeftButton != MouseButtonState.Pressed
+            || sender is not FrameworkElement { DataContext: TerminalTabViewModel { IsNewTab: false } tab } element)
             return;
 
-        var entries = list.SelectedItems.OfType<OnlyShell.Core.Files.RemoteFileEntry>().ToArray();
-        var data = new DataObject("OnlyShell.LocalSelection", entries);
-        DragDrop.DoDragDrop(list, data, DragDropEffects.Copy);
+        DragDrop.DoDragDrop(element, tab, DragDropEffects.Move);
     }
 
-    private void RemoteFiles_MouseMove(object sender, MouseEventArgs e)
+    private void SplitTab_DragOver(object sender, DragEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || sender is not ListView list
-            || list.SelectedItems.Count == 0)
-            return;
-        var position = e.GetPosition(null);
-        if (Math.Abs(position.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(position.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
-            return;
-
-        var entries = list.SelectedItems.OfType<OnlyShell.Core.Files.RemoteFileEntry>().ToArray();
-        var data = new DataObject("OnlyShell.RemoteSelection", entries);
-        DragDrop.DoDragDrop(list, data, DragDropEffects.Copy);
-    }
-
-    private void FilePane_DragOver(object sender, DragEventArgs e)
-    {
-        var list = sender as ListView;
-        var allowed = list?.Name switch
-        {
-            "LocalFileList" => e.Data.GetDataPresent("OnlyShell.RemoteSelection"),
-            "RemoteFileList" => e.Data.GetDataPresent("OnlyShell.LocalSelection"),
-            _ => false
-        };
-        e.Effects = allowed ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = e.Data.GetDataPresent(typeof(TerminalTabViewModel)) ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
-    private void LocalFiles_Drop(object sender, DragEventArgs e)
+    private void SplitTab_Drop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetData("OnlyShell.RemoteSelection") is OnlyShell.Core.Files.RemoteFileEntry[] entries)
-        {
-            _viewModel.SetSelectedRemoteFiles(entries);
-            _viewModel.DownloadRemoteFileCommand.Execute(null);
-            e.Handled = true;
-        }
-    }
+        if (sender is not TabControl { Tag: string pane } || e.Data.GetData(typeof(TerminalTabViewModel)) is not TerminalTabViewModel tab)
+            return;
 
-    private void RemoteFiles_Drop(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetData("OnlyShell.LocalSelection") is OnlyShell.Core.Files.RemoteFileEntry[] entries)
-        {
-            _viewModel.SetSelectedLocalFiles(entries);
-            _viewModel.UploadFileCommand.Execute(null);
-            e.Handled = true;
-        }
+        _viewModel.MoveSplitTabCommand.Execute(new WorkspaceViewModel.SplitTabMoveRequest(tab, pane == "left"));
+        e.Handled = true;
     }
 
     private void FocusActiveTerminal() => Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>

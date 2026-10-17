@@ -20,6 +20,9 @@ namespace OnlyShell.Presentation.ViewModels;
 
 public sealed partial class WorkspaceViewModel : ObservableObject
 {
+    public sealed record SplitHostConnectionRequest(HostProfile Host, TerminalTabViewModel Placeholder);
+    public sealed record SplitTabMoveRequest(TerminalTabViewModel Tab, bool ToLeftPane);
+
     private sealed record LocalTreeEntry(string FullPath, string RelativePath, bool IsDirectory, long Size);
 
     private sealed record QueuedSftpTransfer(
@@ -56,6 +59,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     public ObservableCollection<HostProfile> Hosts { get; } = [];
     public ObservableCollection<TerminalTabViewModel> TerminalTabs { get; } = [];
+    public ObservableCollection<TerminalTabViewModel> LeftSplitTabs { get; } = [];
+    public ObservableCollection<TerminalTabViewModel> RightSplitTabs { get; } = [];
+    public IReadOnlyList<TerminalTabViewModel> SplitCandidates => TerminalTabs
+        .Where(tab => !tab.IsNewTab && !ReferenceEquals(tab, SelectedTerminalTab))
+        .ToArray();
+    public string SplitToggleLabel => IsSplitView ? "[ EXIT SPLIT ]" : "[ SPLIT VIEW ]";
     public ObservableCollection<RemoteFileEntry> RemoteFiles { get; } = [];
     public ObservableCollection<RemoteFileEntry> LocalFiles { get; } = [];
     public IReadOnlyList<string> LocalDrives { get; } = DriveInfo.GetDrives().Where(drive => drive.IsReady).Select(drive => drive.Name).ToArray();
@@ -107,6 +116,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     [ObservableProperty]
     private TerminalTabViewModel? selectedTerminalTab;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleSplitViewCommand))]
+    private bool isSplitView;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleSplitViewCommand))]
+    private TerminalTabViewModel? splitSecondaryTab;
+
+    [ObservableProperty]
+    private TerminalTabViewModel? leftSplitSelectedTab;
 
     [ObservableProperty]
     private string hostFilter = string.Empty;
@@ -224,7 +244,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     };
 
     public int HostCount => Hosts.Count;
-    public int ActiveSessionCount => TerminalTabs.Count;
+    public int ActiveSessionCount => TerminalTabs.Count(tab => !tab.IsNewTab);
     public bool HasSelectedHost => SelectedHost is not null;
     public bool NoHostSelected => SelectedHost is null;
     public string CredentialStatus => SelectedHost?.AuthenticationMethod == SshAuthenticationMethod.PrivateKey
@@ -293,6 +313,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             OnPropertyChanged(nameof(IsTerminalSessionVisible));
             OnPropertyChanged(nameof(IsTerminalEmpty));
             OnPropertyChanged(nameof(IsFeaturePlaceholder));
+            OnPropertyChanged(nameof(SplitCandidates));
+            ToggleSplitViewCommand.NotifyCanExecuteChanged();
+            foreach (var tab in TerminalTabs.Where(tab => !tab.IsNewTab))
+            {
+                if (IsSplitView && !LeftSplitTabs.Contains(tab) && !RightSplitTabs.Contains(tab))
+                    LeftSplitTabs.Add(tab);
+            }
+            if (SplitCandidates.Count == 0)
+                IsSplitView = false;
             if (!_restoringTerminalWorkspace)
                 _ = SaveTerminalWorkspaceStateAsync();
         };
@@ -418,6 +447,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(NoHostSelected));
         OnPropertyChanged(nameof(CredentialStatus));
         OnPropertyChanged(nameof(ScriptExecutionTargetDescription));
+        ConnectSftpCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnActiveSectionChanged(string value)
@@ -494,8 +524,155 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     partial void OnSelectedTerminalTabChanged(TerminalTabViewModel? value)
     {
+        OnPropertyChanged(nameof(SplitCandidates));
+        OnPropertyChanged(nameof(SplitToggleLabel));
+        ToggleSplitViewCommand.NotifyCanExecuteChanged();
+        if (value?.IsNewTab == true && !IsSplitView)
+            IsSplitView = false;
+        else if (IsSplitView && value is not null && LeftSplitTabs.Contains(value))
+            LeftSplitSelectedTab = value;
+        if (value?.Host is { } host && SelectedHost?.Id != host.Id)
+            SelectedHost = Hosts.FirstOrDefault(item => item.Id == host.Id) ?? host;
+        ConnectSftpCommand.NotifyCanExecuteChanged();
         if (!_restoringTerminalWorkspace)
             _ = SaveTerminalWorkspaceStateAsync();
+    }
+
+    partial void OnIsSplitViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SplitToggleLabel));
+        ToggleSplitViewCommand.NotifyCanExecuteChanged();
+        if (!value)
+        {
+            LeftSplitTabs.Clear();
+            RightSplitTabs.Clear();
+        }
+    }
+
+    partial void OnSplitSecondaryTabChanged(TerminalTabViewModel? value)
+    {
+        if (IsSplitView && value is not null && ReferenceEquals(value, LeftSplitSelectedTab))
+            SplitSecondaryTab = RightSplitTabs.FirstOrDefault(tab => !ReferenceEquals(tab, value));
+    }
+
+    partial void OnLeftSplitSelectedTabChanged(TerminalTabViewModel? value)
+    {
+        if (IsSplitView && value is not null && ReferenceEquals(value, SplitSecondaryTab))
+            SplitSecondaryTab = RightSplitTabs.FirstOrDefault(tab => !ReferenceEquals(tab, value));
+    }
+
+    private bool CanToggleSplitView() => IsSplitView
+        || (SelectedTerminalTab is { IsNewTab: false } && SplitCandidates.Count > 0);
+
+    [RelayCommand(CanExecute = nameof(CanToggleSplitView))]
+    private void ToggleSplitView()
+    {
+        if (IsSplitView)
+        {
+            IsSplitView = false;
+            return;
+        }
+
+        SplitSecondaryTab = SplitCandidates.FirstOrDefault();
+        if (SplitSecondaryTab is null)
+            return;
+
+        LeftSplitTabs.Clear();
+        RightSplitTabs.Clear();
+        foreach (var tab in TerminalTabs.Where(tab => !tab.IsNewTab))
+        {
+            if (ReferenceEquals(tab, SplitSecondaryTab))
+                RightSplitTabs.Add(tab);
+            else
+                LeftSplitTabs.Add(tab);
+        }
+        LeftSplitSelectedTab = SelectedTerminalTab;
+        IsSplitView = true;
+    }
+
+    [RelayCommand]
+    private Task CloseLeftSplitTabAsync(TerminalTabViewModel? tab) => CloseSplitPaneTabAsync(tab, LeftSplitTabs, true);
+
+    [RelayCommand]
+    private Task CloseRightSplitTabAsync(TerminalTabViewModel? tab) => CloseSplitPaneTabAsync(tab, RightSplitTabs, false);
+
+    [RelayCommand]
+    private void AddLeftSplitTab() => AddSplitQuickConnectTab(LeftSplitTabs, true);
+
+    [RelayCommand]
+    private void AddRightSplitTab() => AddSplitQuickConnectTab(RightSplitTabs, false);
+
+    private void AddSplitQuickConnectTab(ObservableCollection<TerminalTabViewModel> paneTabs, bool isLeftPane)
+    {
+        if (!IsSplitView)
+            return;
+
+        var tab = new TerminalTabViewModel(null, null, TerminalSessionKind.New);
+        paneTabs.Add(tab);
+        if (isLeftPane)
+            LeftSplitSelectedTab = tab;
+        else
+            SplitSecondaryTab = tab;
+    }
+
+    [RelayCommand]
+    private void MoveSplitTab(SplitTabMoveRequest? request)
+    {
+        if (request is null || request.Tab.IsNewTab)
+            return;
+
+        var source = LeftSplitTabs.Contains(request.Tab) ? LeftSplitTabs
+            : RightSplitTabs.Contains(request.Tab) ? RightSplitTabs
+            : null;
+        var target = request.ToLeftPane ? LeftSplitTabs : RightSplitTabs;
+        if (source is null || ReferenceEquals(source, target))
+            return;
+
+        source.Remove(request.Tab);
+        if (!target.Contains(request.Tab))
+            target.Add(request.Tab);
+        if (request.ToLeftPane)
+            LeftSplitSelectedTab = request.Tab;
+        else
+            SplitSecondaryTab = request.Tab;
+    }
+
+    [RelayCommand]
+    private Task OpenHostInSplitTabAsync(SplitHostConnectionRequest? request)
+    {
+        if (request is null)
+            return Task.CompletedTask;
+        var paneTabs = LeftSplitTabs.Contains(request.Placeholder) ? LeftSplitTabs
+            : RightSplitTabs.Contains(request.Placeholder) ? RightSplitTabs
+            : null;
+        return paneTabs is null ? Task.CompletedTask : OpenHostTerminalCoreAsync(request.Host, request.Placeholder, paneTabs);
+    }
+
+    private async Task CloseSplitPaneTabAsync(TerminalTabViewModel? tab, ObservableCollection<TerminalTabViewModel> paneTabs, bool isLeftPane)
+    {
+        if (tab is null || !paneTabs.Remove(tab))
+            return;
+
+        if (isLeftPane && ReferenceEquals(LeftSplitSelectedTab, tab))
+            LeftSplitSelectedTab = LeftSplitTabs.FirstOrDefault();
+        else if (!isLeftPane && ReferenceEquals(SplitSecondaryTab, tab))
+            SplitSecondaryTab = RightSplitTabs.FirstOrDefault(item => !ReferenceEquals(item, LeftSplitSelectedTab));
+
+        if (LeftSplitTabs.Contains(tab) || RightSplitTabs.Contains(tab))
+            return;
+
+        if (tab.IsNewTab)
+        {
+            await tab.DisposeAsync();
+            return;
+        }
+
+        TerminalTabs.Remove(tab);
+        await tab.DisposeAsync();
+        if (ReferenceEquals(SelectedTerminalTab, tab))
+            SelectedTerminalTab = TerminalTabs.FirstOrDefault(item => !item.IsNewTab);
+        if (TerminalTabs.Count(item => !item.IsNewTab) < 2)
+            IsSplitView = false;
     }
 
     private bool FilterHost(object item)
@@ -589,9 +766,28 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanEditSelectedHost))]
-    private async Task ConnectToSelectedHostAsync()
+    private Task ConnectToSelectedHostAsync() => OpenHostTerminalAsync(SelectedHost);
+
+    [RelayCommand]
+    private void AddTerminalTab()
     {
-        var host = SelectedHost;
+        ActiveSection = "终端";
+        if (SelectedTerminalTab?.IsNewTab == true)
+            return;
+        var tab = new TerminalTabViewModel(null, null, TerminalSessionKind.New);
+        TerminalTabs.Add(tab);
+        SelectedTerminalTab = tab;
+        StatusMessage = "TERMINAL / SELECT A HOST";
+    }
+
+    [RelayCommand]
+    private Task OpenHostTerminalAsync(HostProfile? host) => OpenHostTerminalCoreAsync(host, null, null);
+
+    private async Task OpenHostTerminalCoreAsync(
+        HostProfile? host,
+        TerminalTabViewModel? splitPlaceholder,
+        ObservableCollection<TerminalTabViewModel>? splitPaneTabs)
+    {
         if (host is null)
             return;
 
@@ -608,10 +804,36 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             var secret = credential.Secret;
 
             var tab = new TerminalTabViewModel(host, session);
-            TerminalTabs.Add(tab);
-            SelectedTerminalTab = tab;
+            if (splitPlaceholder is not null && splitPaneTabs is not null)
+            {
+                var index = splitPaneTabs.IndexOf(splitPlaceholder);
+                if (index >= 0)
+                    splitPaneTabs[index] = tab;
+                if (ReferenceEquals(splitPaneTabs, LeftSplitTabs))
+                    LeftSplitSelectedTab = tab;
+                else
+                    SplitSecondaryTab = tab;
+                TerminalTabs.Add(tab);
+                await splitPlaceholder.DisposeAsync();
+            }
+            else
+            {
+                var placeholder = SelectedTerminalTab is { IsNewTab: true } ? SelectedTerminalTab : null;
+                if (placeholder is not null)
+                {
+                    var index = TerminalTabs.IndexOf(placeholder);
+                    TerminalTabs[index] = tab;
+                    await placeholder.DisposeAsync();
+                }
+                else
+                {
+                    TerminalTabs.Add(tab);
+                }
+                SelectedTerminalTab = tab;
+            }
             ActiveSection = "终端";
             StatusMessage = $"SSH / CONNECTED   ·   {host.HostName}:{host.Port}";
+            await TryConnectSftpForSshAsync(host, credential.Secret);
 
             string? stagedCredentialReference = null;
             try
@@ -728,6 +950,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         {
             await tab.ReplaceSessionAsync(session);
             StatusMessage = $"SSH / RECONNECTED   ·   {host.HostName}:{host.Port}";
+            await TryConnectSftpForSshAsync(host, credential.Secret);
             var updatedHost = host with { LastConnectedAt = DateTimeOffset.UtcNow };
             string? stagedCredentialReference = null;
             if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
@@ -768,7 +991,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         {
             var session = _localTerminalConnector.Start(ParseLocalShell(id), workingDirectory);
             var tab = new TerminalTabViewModel(null, session, TerminalSessionKind.Local, id, workingDirectory);
-            TerminalTabs.Add(tab);
+            var placeholder = SelectedTerminalTab is { IsNewTab: true } ? SelectedTerminalTab : null;
+            if (placeholder is not null)
+            {
+                var index = TerminalTabs.IndexOf(placeholder);
+                TerminalTabs[index] = tab;
+                _ = placeholder.DisposeAsync();
+            }
+            else
+            {
+                TerminalTabs.Add(tab);
+            }
             SelectedTerminalTab = tab;
             ActiveSection = "终端";
             StatusMessage = $"LOCAL / STARTED  ·  {tab.LocalShellLabel}";
@@ -791,10 +1024,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     {
         try
         {
-            var tabs = TerminalTabs.Select(tab => tab.Kind == TerminalSessionKind.Local
+            var persistedTabs = TerminalTabs.Where(tab => !tab.IsNewTab).ToArray();
+            var tabs = persistedTabs.Select(tab => tab.Kind == TerminalSessionKind.Local
                 ? new RestorableTerminalTab("local", Shell: tab.LocalShellId, WorkingDirectory: tab.LocalWorkingDirectory)
                 : new RestorableTerminalTab("ssh", HostId: tab.Host?.Id)).ToArray();
-            var selectedIndex = SelectedTerminalTab is null ? -1 : TerminalTabs.IndexOf(SelectedTerminalTab);
+            var selectedIndex = SelectedTerminalTab is null || SelectedTerminalTab.IsNewTab
+                ? -1
+                : Array.IndexOf(persistedTabs, SelectedTerminalTab);
             await _terminalWorkspaceStateStore.SaveAsync(new TerminalWorkspaceState(1, tabs, selectedIndex, ActiveSection), cancellationToken);
         }
         catch (Exception exception)
@@ -830,6 +1066,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         var host = SelectedHost;
         if (host is null)
             return;
+
+        if (_sftpSession?.IsConnected == true && _sftpHost?.Id == host.Id)
+            return;
+        if (_sftpSession is not null)
+            await CloseSftpAsync();
 
         SftpStatus = $"CONNECTING  {host.HostName}:{host.Port}";
         ConnectionCredential credential;
@@ -883,6 +1124,61 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             await CloseSftpAsync();
             SftpStatus = $"FAILED  {host.HostName}:{host.Port}";
             await _sftpDialogs.ShowErrorAsync($"无法打开 {host.Name} 的 SFTP 会话。\n\n{exception.Message}");
+        }
+    }
+
+    private async Task TryConnectSftpForSshAsync(HostProfile host, string secret)
+    {
+        if (_sftpSession?.IsConnected == true)
+        {
+            if (_sftpHost?.Id == host.Id)
+            {
+                SftpStatus = $"CONNECTED  {host.UserName}@{host.HostName}";
+                return;
+            }
+
+            if (SftpTransfers.Any(item => item.Status is "QUEUED" or "RUNNING"))
+            {
+                SftpStatus = $"CONNECTED TO {_sftpHost?.Name}  ·  TRANSFER IN PROGRESS";
+                return;
+            }
+
+            try { await CloseSftpAsync(); }
+            catch { /* A stale SFTP transport should not block the new SSH terminal. */ }
+        }
+
+        if (_sftpSession is not null)
+            await CloseSftpAsync();
+
+        SftpStatus = $"CONNECTING  {host.HostName}:{host.Port}";
+        try
+        {
+            var session = await _sftpConnector.ConnectAsync(host, secret);
+            _sftpSession = session;
+            _sftpHost = host;
+            OnPropertyChanged(nameof(SftpHost));
+            OnPropertyChanged(nameof(IsSftpConnected));
+            OnPropertyChanged(nameof(IsSftpDisconnected));
+            RemotePath = session.HomeDirectory;
+            var entries = await session.ListDirectoryAsync(RemotePath);
+            SetSelectedRemoteFiles([]);
+            RemoteFiles.Clear();
+            foreach (var entry in entries)
+                RemoteFiles.Add(entry);
+            SftpStatus = $"CONNECTED  {host.UserName}@{host.HostName}  ·  {entries.Count} ITEMS";
+        }
+        catch (Exception exception)
+        {
+            if (_sftpSession is not null && _sftpHost?.Id == host.Id)
+            {
+                try { await CloseSftpAsync(); }
+                catch { /* Keep the SFTP error visible without failing the SSH connection. */ }
+            }
+            SftpStatus = $"SFTP FAILED  ·  {exception.Message}";
+        }
+        finally
+        {
+            ConnectSftpCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -1124,7 +1420,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         catch (Exception exception) { await _sftpDialogs.ShowErrorAsync($"删除失败。\n\n{exception.Message}"); }
     }
 
-    private bool CanConnectSftp() => SelectedHost is not null && _sftpSession is null;
+    private bool CanConnectSftp() => SelectedHost is not null && (_sftpSession is null || !_sftpSession.IsConnected || _sftpHost?.Id != SelectedHost.Id);
     private bool CanOpenRemoteDirectory() => _sftpSession is not null && SelectedRemoteFile?.IsDirectory == true;
     private bool CanDownloadRemoteFile() => _sftpSession is not null
         && (_selectedRemoteFiles.Count > 0 || SelectedRemoteFile is { IsDirectory: false, IsSymbolicLink: false });
@@ -1593,6 +1889,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private void SelectSection(string section)
     {
         ActiveSection = section;
+        if (string.Equals(section, "终端", StringComparison.Ordinal) && TerminalTabs.Count == 0)
+            AddTerminalTab();
         if (section == "脚本")
         {
             StatusMessage = "SCRIPT CENTER / READY";

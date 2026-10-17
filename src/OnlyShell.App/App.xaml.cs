@@ -61,8 +61,20 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
+            var logPath = Path.Combine(Path.GetTempPath(), "OnlyShell-startup-error.log");
+            try
+            {
+                File.WriteAllText(
+                    logPath,
+                    $"[{DateTimeOffset.Now:O}] Startup failed.{Environment.NewLine}{exception}");
+            }
+            catch
+            {
+                logPath = "(无法写入临时日志文件)";
+            }
+
             MessageBox.Show(
-                $"OnlyShell 无法启动。\n\n{exception.Message}",
+                $"OnlyShell 无法启动。\n\n{exception.Message}\n\n详细信息：{logPath}",
                 "OnlyShell / Startup Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
