@@ -111,7 +111,10 @@ public sealed class CommandLineSession : TerminalSession
         catch (Exception exc)
         {
             Debug.WriteLine(exc);
-            throw;
+        }
+        finally
+        {
+            NotifyDisconnected();
         }
     }
 

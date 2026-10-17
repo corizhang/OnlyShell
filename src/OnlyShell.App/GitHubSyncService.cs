@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using OnlyShell.Core.Hosts;
 using OnlyShell.Core.Secrets;
@@ -36,12 +37,7 @@ public sealed class GitHubSyncService(
         var authorization = await _deviceFlow.BeginAsync(ClientId, cancellationToken);
         await interaction.ShowDeviceCodeAsync(authorization.VerificationUri, authorization.UserCode);
         var token = await _deviceFlow.WaitForTokenAsync(ClientId, authorization, cancellationToken: cancellationToken);
-        var tokenJson = JsonSerializer.Serialize(token, JsonOptions);
-        var tokenReference = await credentials.StoreAsync(tokenJson, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(_settings.TokenReference))
-            await credentials.DeleteAsync(_settings.TokenReference, cancellationToken);
-        _settings = _settings with { TokenReference = tokenReference };
-        SaveSettings();
+        await ReplaceTokenAsync(token, cancellationToken);
     }
 
     public async Task PushAsync(string owner, string repository, string branch, string passphrase, CancellationToken cancellationToken = default)
@@ -51,13 +47,12 @@ public sealed class GitHubSyncService(
         var provider = CreateProvider(owner, repository, branch, token.AccessToken);
         var current = await provider.DownloadAsync(cancellationToken);
         if (current is not null)
-            _ = new AesGcmSyncPayloadProtector().Unprotect(current.Payload, passphrase);
+            _ = UnprotectPayload(current.Payload, passphrase);
         var serialized = SyncConfigurationSerializer.Serialize(await hosts.ListAsync(cancellationToken));
         var encrypted = new AesGcmSyncPayloadProtector().Protect(serialized, passphrase);
         await provider.UploadAsync(new SyncSnapshot(1, encrypted, null, DateTimeOffset.UtcNow), _settings.Version, cancellationToken);
         var updated = await provider.DownloadAsync(cancellationToken);
-        _settings = _settings with { Owner = owner.Trim(), Repository = repository.Trim(), Branch = branch.Trim(), Version = updated?.Version };
-        SaveSettings();
+        SaveSettings(_settings with { Owner = owner.Trim(), Repository = repository.Trim(), Branch = branch.Trim(), Version = updated?.Version });
     }
 
     public async Task<IReadOnlyList<HostProfile>> PullAsync(string owner, string repository, string branch, string passphrase, CancellationToken cancellationToken = default)
@@ -67,11 +62,10 @@ public sealed class GitHubSyncService(
         var provider = CreateProvider(owner, repository, branch, token.AccessToken);
         var snapshot = await provider.DownloadAsync(cancellationToken)
             ?? throw new InvalidOperationException("指定仓库中还没有 OnlyShell 配置。请先在已有设备上执行上传。");
-        var clear = new AesGcmSyncPayloadProtector().Unprotect(snapshot.Payload, passphrase);
+        var clear = UnprotectPayload(snapshot.Payload, passphrase);
         var remote = SyncConfigurationSerializer.Deserialize(clear);
         var merged = SyncConfigurationSerializer.MergeDeviceSecrets(remote, await hosts.ListAsync(cancellationToken));
-        _settings = _settings with { Owner = owner.Trim(), Repository = repository.Trim(), Branch = branch.Trim(), Version = snapshot.Version };
-        SaveSettings();
+        SaveSettings(_settings with { Owner = owner.Trim(), Repository = repository.Trim(), Branch = branch.Trim(), Version = snapshot.Version });
         return merged;
     }
 
@@ -87,10 +81,10 @@ public sealed class GitHubSyncService(
             return token;
         if (string.IsNullOrWhiteSpace(token.RefreshToken))
             throw new InvalidOperationException("GitHub 令牌已过期，请重新连接账号。");
+        if (token.RefreshTokenExpiresAt is { } refreshExpiry && refreshExpiry <= DateTimeOffset.UtcNow)
+            throw new InvalidOperationException("GitHub 续期令牌也已过期，请重新连接账号。");
         var refreshed = await _deviceFlow.RefreshAsync(ClientId, token.RefreshToken, cancellationToken);
-        await credentials.DeleteAsync(_settings.TokenReference, cancellationToken);
-        _settings = _settings with { TokenReference = await credentials.StoreAsync(JsonSerializer.Serialize(refreshed, JsonOptions), cancellationToken) };
-        SaveSettings();
+        await ReplaceTokenAsync(refreshed, cancellationToken);
         return refreshed;
     }
 
@@ -115,10 +109,55 @@ public sealed class GitHubSyncService(
         catch { return new(); }
     }
 
-    private void SaveSettings()
+    private async Task ReplaceTokenAsync(GitHubUserToken token, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(_settings, JsonOptions));
+        var previousReference = _settings.TokenReference;
+        var nextReference = await credentials.StoreAsync(JsonSerializer.Serialize(token, JsonOptions), cancellationToken);
+        var updated = _settings with { TokenReference = nextReference };
+        try
+        {
+            SaveSettings(updated);
+            _settings = updated;
+        }
+        catch
+        {
+            try { await credentials.DeleteAsync(nextReference, cancellationToken); }
+            catch { /* Preserve the original persistence failure. */ }
+            throw;
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousReference))
+        {
+            try { await credentials.DeleteAsync(previousReference, cancellationToken); }
+            catch (Exception exception) { Debug.WriteLine($"Could not remove replaced GitHub token: {exception.Message}"); }
+        }
+    }
+
+    private static string UnprotectPayload(string payload, string passphrase)
+    {
+        try { return new AesGcmSyncPayloadProtector().Unprotect(payload, passphrase); }
+        catch (CryptographicException exception)
+        {
+            throw new InvalidDataException("同步加密口令不正确，或远端配置数据已损坏。请检查口令后重试。", exception);
+        }
+    }
+
+    private void SaveSettings(SyncSettings settings)
+    {
+        var directory = Path.GetDirectoryName(SettingsPath)!;
+        Directory.CreateDirectory(directory);
+        var temporaryPath = SettingsPath + ".tmp";
+        try
+        {
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(settings, JsonOptions));
+            File.Move(temporaryPath, SettingsPath, overwrite: true);
+            _settings = settings;
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
     }
 
     private sealed record SyncSettings(string? Owner = null, string? Repository = null, string? Branch = "main", string? TokenReference = null, string? Version = null);

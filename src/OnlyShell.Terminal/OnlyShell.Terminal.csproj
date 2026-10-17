@@ -5,5 +5,6 @@
     <ProjectReference Include="..\OnlyShell.Infrastructure.Ssh\OnlyShell.Infrastructure.Ssh.csproj" />
     <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.WPF\VirtualTerminal.WPF.csproj" />
     <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.SecureShell\VirtualTerminal.SecureShell.csproj" />
+    <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.CommandLine\VirtualTerminal.CommandLine.csproj" />
   </ItemGroup>
 </Project>

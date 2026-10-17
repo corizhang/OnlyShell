@@ -149,6 +149,69 @@ public sealed class SqliteHostRepository(string databasePath) : IHostRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task ReplaceAllAsync(IReadOnlyList<HostProfile> profiles, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(profiles);
+        if (profiles.Select(profile => profile.Id).Distinct().Count() != profiles.Count)
+            throw new ArgumentException("主机列表包含重复 ID，无法安全替换。", nameof(profiles));
+
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = connection.BeginTransaction();
+        try
+        {
+            await using (var delete = connection.CreateCommand())
+            {
+                delete.Transaction = transaction;
+                delete.CommandText = "DELETE FROM Hosts;";
+                await delete.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO Hosts (Id, Name, HostName, Port, UserName, GroupName, CredentialReference, LastConnectedAt, IsFavorite, Note, AuthenticationMethod, PrivateKeyPath)
+                VALUES ($id, $name, $hostName, $port, $userName, $groupName, $credentialReference, $lastConnectedAt, $isFavorite, $note, $authenticationMethod, $privateKeyPath);
+                """;
+            var id = command.Parameters.Add("$id", SqliteType.Text);
+            var name = command.Parameters.Add("$name", SqliteType.Text);
+            var hostName = command.Parameters.Add("$hostName", SqliteType.Text);
+            var port = command.Parameters.Add("$port", SqliteType.Integer);
+            var userName = command.Parameters.Add("$userName", SqliteType.Text);
+            var groupName = command.Parameters.Add("$groupName", SqliteType.Text);
+            var credentialReference = command.Parameters.Add("$credentialReference", SqliteType.Text);
+            var lastConnectedAt = command.Parameters.Add("$lastConnectedAt", SqliteType.Text);
+            var isFavorite = command.Parameters.Add("$isFavorite", SqliteType.Integer);
+            var note = command.Parameters.Add("$note", SqliteType.Text);
+            var authenticationMethod = command.Parameters.Add("$authenticationMethod", SqliteType.Text);
+            var privateKeyPath = command.Parameters.Add("$privateKeyPath", SqliteType.Text);
+
+            foreach (var profile in profiles)
+            {
+                id.Value = profile.Id.ToString("D");
+                name.Value = profile.Name;
+                hostName.Value = profile.HostName;
+                port.Value = profile.Port;
+                userName.Value = profile.UserName;
+                groupName.Value = (object?)profile.Group ?? DBNull.Value;
+                credentialReference.Value = (object?)profile.CredentialReference ?? DBNull.Value;
+                lastConnectedAt.Value = (object?)profile.LastConnectedAt?.ToString("O") ?? DBNull.Value;
+                isFavorite.Value = profile.IsFavorite ? 1 : 0;
+                note.Value = (object?)profile.Note ?? DBNull.Value;
+                authenticationMethod.Value = profile.AuthenticationMethod.ToString();
+                privateKeyPath.Value = (object?)profile.PrivateKeyPath ?? DBNull.Value;
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await using var connection = new SqliteConnection(_connectionString);

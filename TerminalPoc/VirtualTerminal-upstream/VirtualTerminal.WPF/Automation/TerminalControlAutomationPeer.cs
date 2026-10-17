@@ -18,6 +18,9 @@ internal sealed class TerminalControlAutomationPeer : FrameworkElementAutomation
     public TerminalControlAutomationPeer(TerminalControl owner)
         : base(owner)
     {
+        // Do not ask WPF for an automation provider while this peer is being
+        // constructed. ProviderFromPeer can walk the visual/automation tree,
+        // which re-enters this peer before WPF has connected it to its parent.
         UpdateText();
     }
 
@@ -99,20 +102,7 @@ internal sealed class TerminalControlAutomationPeer : FrameworkElementAutomation
         if (_text == newText)
             return;
 
-        string oldText = _text;
         _text = newText;
-
-        // WPF can create an AutomationPeer before it has an AutomationProvider.
-        // During that construction window ProviderFromPeer returns null, so defer
-        // notifications until a later buffer update rather than terminating the app.
-        if (ProviderFromPeer(this) is not { } provider)
-            return;
-
-        RaisePropertyChangedEvent(ValuePatternIdentifiers.ValueProperty, oldText, newText);
-        AutomationInteropProvider.RaiseAutomationEvent(
-            TextPattern.TextChangedEvent,
-            provider,
-            new AutomationEventArgs(TextPattern.TextChangedEvent));
     }
 
     /// <summary>

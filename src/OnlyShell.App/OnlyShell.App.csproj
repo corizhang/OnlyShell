@@ -12,7 +12,9 @@
     <ProjectReference Include="..\OnlyShell.Infrastructure.Ssh\OnlyShell.Infrastructure.Ssh.csproj" />
     <ProjectReference Include="..\OnlyShell.Infrastructure.Secrets\OnlyShell.Infrastructure.Secrets.csproj" />
     <ProjectReference Include="..\OnlyShell.Infrastructure.Sync\OnlyShell.Infrastructure.Sync.csproj" />
+    <ProjectReference Include="..\..\TerminalPoc\VirtualTerminal-upstream\VirtualTerminal.CommandLine\VirtualTerminal.CommandLine.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <PackageReference Include="AvalonEdit" />
   </ItemGroup>
 </Project>

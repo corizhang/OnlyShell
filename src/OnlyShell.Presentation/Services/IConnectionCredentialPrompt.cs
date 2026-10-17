@@ -7,4 +7,4 @@ public interface IConnectionCredentialPrompt
     Task<ConnectionCredential?> PromptForSecretAsync(HostProfile host, string? savedSecret);
 }
 
-public sealed record ConnectionCredential(string Secret, bool RememberOnThisDevice);
+public sealed record ConnectionCredential(string Secret, bool RememberOnThisDevice, bool WasSavedCredential = false);

@@ -7,6 +7,7 @@ using OnlyShell.Core.Hosts;
 using OnlyShell.Core.Files;
 using OnlyShell.Core.Security;
 using OnlyShell.Core.Secrets;
+using OnlyShell.Core.Scripts;
 using OnlyShell.Infrastructure.Data;
 using OnlyShell.Infrastructure.Secrets;
 using OnlyShell.Infrastructure.Ssh;
@@ -32,6 +33,9 @@ public partial class App : Application
             builder.Services.AddSingleton<IKnownHostRepository>(_ => new SqliteKnownHostRepository(GetDatabasePath()));
             builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
             builder.Services.AddSingleton<ISshTerminalConnector, SshTerminalConnector>();
+            builder.Services.AddSingleton<ILocalTerminalConnector, LocalTerminalConnector>();
+            builder.Services.AddSingleton<IRemoteScriptRunner, RemoteScriptRunner>();
+            builder.Services.AddSingleton<ILocalScriptRunner, LocalScriptRunner>();
             builder.Services.AddSingleton<ISftpSessionConnector, SftpSessionConnector>();
             builder.Services.AddSingleton<IHostKeyConfirmationService, WpfHostKeyConfirmationService>();
             builder.Services.AddSingleton<OnlyShell.Presentation.Services.IConnectionCredentialPrompt, WpfConnectionCredentialPrompt>();
@@ -40,12 +44,16 @@ public partial class App : Application
             builder.Services.AddSingleton<HttpClient>();
             builder.Services.AddSingleton<ISyncInteractionService, WpfSyncInteractionService>();
             builder.Services.AddSingleton<IGitHubSyncService, GitHubSyncService>();
+            builder.Services.AddSingleton<ITerminalWorkspaceStateStore, JsonTerminalWorkspaceStateStore>();
+            builder.Services.AddSingleton<IScriptCenterStore, JsonScriptCenterStore>();
+            builder.Services.AddSingleton<IScriptCenterInteractionService, WpfScriptCenterInteractionService>();
             builder.Services.AddSingleton<WorkspaceViewModel>();
             builder.Services.AddTransient<MainWindow>();
             _applicationHost = builder.Build();
 
             await _applicationHost.Services.GetRequiredService<SqliteHostRepository>().InitializeAsync();
             await _applicationHost.Services.GetRequiredService<WorkspaceViewModel>().LoadAsync();
+            await _applicationHost.Services.GetRequiredService<WorkspaceViewModel>().RestoreTerminalWorkspaceAsync();
 
             var window = _applicationHost.Services.GetRequiredService<MainWindow>();
             MainWindow = window;

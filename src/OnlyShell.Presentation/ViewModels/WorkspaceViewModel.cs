@@ -1,15 +1,20 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Text;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Renci.SshNet.Common;
 using OnlyShell.Core.Hosts;
 using OnlyShell.Core.Files;
 using OnlyShell.Core.Secrets;
+using OnlyShell.Core.Scripts;
 using OnlyShell.Presentation.Services;
 using OnlyShell.Terminal;
+using VirtualTerminal;
 
 namespace OnlyShell.Presentation.ViewModels;
 
@@ -30,6 +35,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private readonly ISftpDialogService _sftpDialogs;
     private readonly IGitHubSyncService _gitHubSync;
     private readonly ISyncInteractionService _syncInteraction;
+    private readonly ILocalTerminalConnector _localTerminalConnector;
+    private readonly ITerminalWorkspaceStateStore _terminalWorkspaceStateStore;
+    private readonly IScriptCenterStore _scriptCenterStore;
+    private readonly IRemoteScriptRunner _remoteScriptRunner;
+    private readonly ILocalScriptRunner _localScriptRunner;
+    private readonly IScriptCenterInteractionService _scriptCenterInteraction;
+    private bool _scriptCenterLoaded;
+    private bool _localExecutionConfirmed;
+    private CancellationTokenSource? _scriptRunCancellation;
+    private bool _restoringTerminalWorkspace;
     private ISftpSession? _sftpSession;
     private HostProfile? _sftpHost;
     private readonly Queue<QueuedSftpTransfer> _sftpTransferQueue = new();
@@ -45,9 +60,33 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public ObservableCollection<RemoteFileEntry> LocalFiles { get; } = [];
     public IReadOnlyList<string> LocalDrives { get; } = DriveInfo.GetDrives().Where(drive => drive.IsReady).Select(drive => drive.Name).ToArray();
     public ObservableCollection<SftpTransferItemViewModel> SftpTransfers { get; } = [];
+    public ObservableCollection<ScriptDefinition> Scripts { get; } = [];
+    public ObservableCollection<ScriptCatalogNode> ScriptCatalogNodes { get; } = [];
+    public ObservableCollection<ScriptCatalogNode> VisibleScriptCatalogNodes { get; } = [];
+    public ObservableCollection<ScriptRunLog> RecentScriptRuns { get; } = [];
+    public IReadOnlyList<string> ScriptExecutionTargetOptions { get; } = ["远程主机", "本机"];
+    public IReadOnlyList<string> AvailableScriptRuntimeOptions => SelectedScriptExecutionTarget == "本机"
+        ? ["PowerShell", "CMD", "Python 3"]
+        : ["Bash", "Python 3"];
     public IReadOnlyList<RemoteFileEntry> SelectedRemoteFiles => _selectedRemoteFiles;
     public IReadOnlyList<RemoteFileEntry> SelectedLocalFiles => _selectedLocalFiles;
     public ICollectionView HostsView { get; }
+    public ICollectionView ScriptsView { get; }
+
+    public GridLength ScriptCatalogPanelHeight => IsScriptCatalogExpanded
+        ? new GridLength(1, GridUnitType.Star)
+        : GridLength.Auto;
+    public GridLength RecentRunsPanelHeight => !IsRecentRunsExpanded
+        ? GridLength.Auto
+        : IsScriptCatalogExpanded ? new GridLength(180) : new GridLength(1, GridUnitType.Star);
+    public GridLength ScriptCatalogListHeight => IsScriptCatalogExpanded
+        ? new GridLength(1, GridUnitType.Star)
+        : new GridLength(0);
+    public GridLength RecentRunsListHeight => IsRecentRunsExpanded
+        ? new GridLength(1, GridUnitType.Star)
+        : new GridLength(0);
+    public string ScriptCatalogToggleLabel => IsScriptCatalogExpanded ? "[ − ]" : "[ + ]";
+    public string RecentRunsToggleLabel => IsRecentRunsExpanded ? "[ − ]" : "[ + ]";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(EditHostCommand))]
@@ -108,10 +147,59 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     [ObservableProperty]
     private bool isSyncBusy;
 
+    [ObservableProperty]
+    private ScriptDefinition? selectedScript;
+
+    [ObservableProperty]
+    private ScriptCatalogNode? selectedScriptCatalogNode;
+
+    [ObservableProperty]
+    private string scriptName = string.Empty;
+
+    [ObservableProperty]
+    private string scriptDescription = string.Empty;
+
+    [ObservableProperty]
+    private string scriptContent = string.Empty;
+
+    [ObservableProperty]
+    private string selectedScriptRuntime = "Bash";
+
+    [ObservableProperty]
+    private string selectedScriptExecutionTarget = "远程主机";
+
+    [ObservableProperty]
+    private string scriptFolderPath = string.Empty;
+
+    [ObservableProperty]
+    private string scriptSearchText = string.Empty;
+
+    [ObservableProperty]
+    private bool isScriptCatalogExpanded = true;
+
+    [ObservableProperty]
+    private bool isRecentRunsExpanded = true;
+
+    [ObservableProperty]
+    private ScriptRunLog? selectedScriptRun;
+
+    [ObservableProperty]
+    private bool isScriptRunning;
+
+    [ObservableProperty]
+    private string scriptCenterStatus = "READY / SELECT A SCRIPT AND TARGET";
+
     public bool IsHostSection => string.Equals(ActiveSection, "主机", StringComparison.Ordinal);
-    public bool IsFeaturePlaceholder => !IsHostSection && !IsTerminalSessionVisible && !IsTerminalEmpty && !IsSftpWorkspace && !IsSyncWorkspace;
+    public bool IsFeaturePlaceholder => !IsHostSection && !IsTerminalSessionVisible && !IsTerminalEmpty && !IsSftpWorkspace && !IsSyncWorkspace && !IsScriptCenterWorkspace;
     public bool IsSftpWorkspace => string.Equals(ActiveSection, "SFTP", StringComparison.Ordinal);
     public bool IsSyncWorkspace => string.Equals(ActiveSection, "同步", StringComparison.Ordinal);
+    public bool IsScriptCenterWorkspace => string.Equals(ActiveSection, "脚本", StringComparison.Ordinal);
+    public string SelectedScriptRunText => SelectedScriptRun is null
+        ? "// NO RUN SELECTED"
+        : $"[{SelectedScriptRun.StartedAt.LocalDateTime:yyyy-MM-dd HH:mm:ss}] {SelectedScriptRun.TargetType.ToUpperInvariant()} / {SelectedScriptRun.HostName} · {(SelectedScriptRun.ExitCode?.ToString() ?? (IsScriptRunning ? "RUNNING" : "ERROR"))}\n{SelectedScriptRun.Output}{(string.IsNullOrWhiteSpace(SelectedScriptRun.Error) ? string.Empty : $"\n--- STDERR / ERROR ---\n{SelectedScriptRun.Error}")}";
+    public string ScriptExecutionTargetDescription => SelectedScriptExecutionTarget == "本机"
+        ? "LOCAL / 当前 Windows 用户"
+        : SelectedHost?.Name ?? "未选择主机";
     public bool IsSftpConnected => _sftpSession?.IsConnected == true;
     public bool IsSftpDisconnected => !IsSftpConnected;
     public HostProfile? SftpHost => _sftpHost;
@@ -120,13 +208,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public int PendingTransferCount => SftpTransfers.Count(item => item.Status == "QUEUED");
     public bool IsTerminalSessionVisible => string.Equals(ActiveSection, "终端", StringComparison.Ordinal) && TerminalTabs.Count > 0;
     public bool IsTerminalEmpty => string.Equals(ActiveSection, "终端", StringComparison.Ordinal) && TerminalTabs.Count == 0;
+    public bool IsTerminalWorkspace => string.Equals(ActiveSection, "终端", StringComparison.Ordinal);
     public string SectionHeading => IsHostSection ? "主机工作区" : $"{ActiveSection}工作区";
     public string SectionSubtitle => IsHostSection ? "本地主机与连接配置" : FeatureMessage;
     public string FeatureMessage => ActiveSection switch
     {
-        "终端" => "通过 SSH 建立交互式终端会话；断开后保留当前窗口内的终端缓冲区。",
+        "终端" => "在统一标签工作区运行本地 PowerShell、CMD 或 SSH；重启后恢复标签配置。",
         "SFTP" => "本地与远程双栏文件管理；选择文件后直接加入传输队列。",
         "同步" => "GitHub Device Flow · 私有仓库 · AES-GCM 加密主机配置同步。",
+        "脚本" => "本机 PowerShell / CMD / Python 3，或远程 Bash / Python 3；执行结果和历史记录保存在本机。",
         "设置" => "字体、主题、终端行为和本地数据设置将在设置页面阶段实现。",
         "传输" => "上传与下载任务队列将在 SFTP 功能阶段实现。",
         "历史" => "SSH 会话接入后会在此记录连接历史。",
@@ -152,7 +242,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         ISftpSessionConnector sftpConnector,
         ISftpDialogService sftpDialogs,
         IGitHubSyncService gitHubSync,
-        ISyncInteractionService syncInteraction)
+        ISyncInteractionService syncInteraction,
+        ILocalTerminalConnector localTerminalConnector,
+        ITerminalWorkspaceStateStore terminalWorkspaceStateStore,
+        IScriptCenterStore scriptCenterStore,
+        IRemoteScriptRunner remoteScriptRunner,
+        ILocalScriptRunner localScriptRunner,
+        IScriptCenterInteractionService scriptCenterInteraction)
     {
         _hostRepository = hostRepository;
         _dialogs = dialogs;
@@ -163,6 +259,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         _sftpDialogs = sftpDialogs;
         _gitHubSync = gitHubSync;
         _syncInteraction = syncInteraction;
+        _localTerminalConnector = localTerminalConnector;
+        _terminalWorkspaceStateStore = terminalWorkspaceStateStore;
+        _scriptCenterStore = scriptCenterStore;
+        _remoteScriptRunner = remoteScriptRunner;
+        _localScriptRunner = localScriptRunner;
+        _scriptCenterInteraction = scriptCenterInteraction;
         SyncOwner = _gitHubSync.SavedOwner ?? string.Empty;
         SyncRepository = _gitHubSync.SavedRepository ?? string.Empty;
         SyncBranch = _gitHubSync.SavedBranch ?? "main";
@@ -191,12 +293,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             OnPropertyChanged(nameof(IsTerminalSessionVisible));
             OnPropertyChanged(nameof(IsTerminalEmpty));
             OnPropertyChanged(nameof(IsFeaturePlaceholder));
+            if (!_restoringTerminalWorkspace)
+                _ = SaveTerminalWorkspaceStateAsync();
         };
 
         HostsView = CollectionViewSource.GetDefaultView(Hosts);
         HostsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(HostProfile.GroupLabel)));
         HostsView.SortDescriptions.Add(new SortDescription(nameof(HostProfile.Name), ListSortDirection.Ascending));
         HostsView.Filter = FilterHost;
+        ScriptsView = CollectionViewSource.GetDefaultView(Scripts);
+        ScriptsView.Filter = FilterScript;
     }
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
@@ -208,13 +314,110 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         StatusMessage = $"LOCAL / READY   ·   {HostCount} HOSTS";
     }
 
+    public async Task LoadScriptCenterAsync(CancellationToken cancellationToken = default)
+    {
+        if (_scriptCenterLoaded)
+            return;
+        try
+        {
+            foreach (var script in await _scriptCenterStore.LoadScriptsAsync(cancellationToken))
+                Scripts.Add(script);
+            foreach (var run in await _scriptCenterStore.LoadRecentRunsAsync(100, cancellationToken))
+                RecentScriptRuns.Add(run);
+            SelectedScript = Scripts.FirstOrDefault();
+            RebuildScriptCatalogTree();
+            SelectedScriptRun = RecentScriptRuns.FirstOrDefault();
+            _scriptCenterLoaded = true;
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "LOAD FAILED / SCRIPT CATALOG";
+            await _syncInteraction.ShowErrorAsync("加载脚本中心失败", exception.Message);
+        }
+    }
+
+    public async Task RestoreTerminalWorkspaceAsync(CancellationToken cancellationToken = default)
+    {
+        if (_restoringTerminalWorkspace)
+            return;
+        _restoringTerminalWorkspace = true;
+        try
+        {
+            var state = await _terminalWorkspaceStateStore.LoadAsync(cancellationToken);
+            if (state is null)
+                return;
+
+            foreach (var saved in state.Tabs.Take(12))
+            {
+                if (string.Equals(saved.Kind, "local", StringComparison.OrdinalIgnoreCase))
+                {
+                    var shellId = saved.Shell is "cmd" or "pwsh" ? saved.Shell : "powershell";
+                    try
+                    {
+                        var session = _localTerminalConnector.Start(ParseLocalShell(shellId), saved.WorkingDirectory);
+                        TerminalTabs.Add(new TerminalTabViewModel(null, session, TerminalSessionKind.Local, shellId, saved.WorkingDirectory));
+                    }
+                    catch (Exception exception)
+                    {
+                        StatusMessage = $"LOCAL SHELL / RESTORE FAILED  ·  {exception.Message}";
+                    }
+                    continue;
+                }
+
+                if (string.Equals(saved.Kind, "ssh", StringComparison.OrdinalIgnoreCase)
+                    && saved.HostId is { } hostId
+                    && Hosts.FirstOrDefault(host => host.Id == hostId) is { } host)
+                    TerminalTabs.Add(new TerminalTabViewModel(host, null, TerminalSessionKind.Ssh));
+            }
+
+            SelectedTerminalTab = TerminalTabs.Count == 0
+                ? null
+                : TerminalTabs[Math.Clamp(state.SelectedTabIndex, 0, TerminalTabs.Count - 1)];
+            ActiveSection = state.ActiveSection is "终端" or "主机" or "SFTP" or "同步" or "脚本" or "设置"
+                ? state.ActiveSection
+                : TerminalTabs.Count > 0 ? "终端" : "主机";
+            if (TerminalTabs.Count > 0 && state.ActiveSection == "终端")
+                StatusMessage = $"TERMINAL / RESTORED  ·  {TerminalTabs.Count} TABS";
+        }
+        finally
+        {
+            _restoringTerminalWorkspace = false;
+            await SaveTerminalWorkspaceStateAsync(cancellationToken);
+        }
+    }
+
     partial void OnHostFilterChanged(string value) => HostsView.Refresh();
+
+    partial void OnScriptSearchTextChanged(string value)
+    {
+        ScriptsView.Refresh();
+        RebuildScriptCatalogTree();
+    }
+
+    partial void OnIsScriptCatalogExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ScriptCatalogListHeight));
+        OnPropertyChanged(nameof(ScriptCatalogPanelHeight));
+        OnPropertyChanged(nameof(RecentRunsPanelHeight));
+        OnPropertyChanged(nameof(RecentRunsListHeight));
+        OnPropertyChanged(nameof(ScriptCatalogToggleLabel));
+    }
+
+    partial void OnIsRecentRunsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ScriptCatalogListHeight));
+        OnPropertyChanged(nameof(ScriptCatalogPanelHeight));
+        OnPropertyChanged(nameof(RecentRunsPanelHeight));
+        OnPropertyChanged(nameof(RecentRunsListHeight));
+        OnPropertyChanged(nameof(RecentRunsToggleLabel));
+    }
 
     partial void OnSelectedHostChanged(HostProfile? value)
     {
         OnPropertyChanged(nameof(HasSelectedHost));
         OnPropertyChanged(nameof(NoHostSelected));
         OnPropertyChanged(nameof(CredentialStatus));
+        OnPropertyChanged(nameof(ScriptExecutionTargetDescription));
     }
 
     partial void OnActiveSectionChanged(string value)
@@ -222,14 +425,77 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(IsHostSection));
         OnPropertyChanged(nameof(IsSftpWorkspace));
         OnPropertyChanged(nameof(IsSyncWorkspace));
+        OnPropertyChanged(nameof(IsScriptCenterWorkspace));
         OnPropertyChanged(nameof(IsSftpConnected));
         OnPropertyChanged(nameof(IsSftpDisconnected));
         OnPropertyChanged(nameof(IsFeaturePlaceholder));
         OnPropertyChanged(nameof(IsTerminalSessionVisible));
         OnPropertyChanged(nameof(IsTerminalEmpty));
+        OnPropertyChanged(nameof(IsTerminalWorkspace));
         OnPropertyChanged(nameof(FeatureMessage));
         OnPropertyChanged(nameof(SectionHeading));
         OnPropertyChanged(nameof(SectionSubtitle));
+        if (!_restoringTerminalWorkspace)
+            _ = SaveTerminalWorkspaceStateAsync();
+        if (IsScriptCenterWorkspace)
+            _ = LoadScriptCenterAsync();
+    }
+
+    partial void OnSelectedScriptChanged(ScriptDefinition? value)
+    {
+        if (value is null)
+        {
+            ScriptName = string.Empty;
+            ScriptDescription = string.Empty;
+            ScriptContent = string.Empty;
+            ScriptFolderPath = string.Empty;
+            SelectedScriptRuntime = "Bash";
+            SelectedScriptCatalogNode = null;
+            return;
+        }
+        ScriptName = value.Name;
+        ScriptDescription = value.Description;
+        ScriptContent = value.Content;
+        ScriptFolderPath = value.FolderPath;
+        SelectedScriptExecutionTarget = value.ExecutionTarget == "Local" ? "本机" : "远程主机";
+        SelectedScriptRuntime = RuntimeName(value.Runtime);
+        SelectedScriptCatalogNode = VisibleScriptCatalogNodes.FirstOrDefault(node => node.Script?.Id == value.Id);
+    }
+
+    partial void OnSelectedScriptCatalogNodeChanged(ScriptCatalogNode? value)
+    {
+        if (value?.Script is { } script && SelectedScript?.Id != script.Id)
+            SelectedScript = Scripts.FirstOrDefault(item => item.Id == script.Id);
+    }
+
+    partial void OnSelectedScriptExecutionTargetChanged(string value)
+    {
+        OnPropertyChanged(nameof(AvailableScriptRuntimeOptions));
+        OnPropertyChanged(nameof(ScriptExecutionTargetDescription));
+        if (!AvailableScriptRuntimeOptions.Contains(SelectedScriptRuntime, StringComparer.Ordinal))
+            ScriptCenterStatus = $"TARGET CHANGED / CHOOSE A SUPPORTED RUNTIME (CURRENT: {SelectedScriptRuntime})";
+    }
+
+    private static ScriptRuntimeKind ParseRuntime(string runtime) => runtime switch
+    {
+        "Python 3" => ScriptRuntimeKind.Python3,
+        "PowerShell" => ScriptRuntimeKind.PowerShell,
+        "CMD" => ScriptRuntimeKind.Cmd,
+        _ => ScriptRuntimeKind.Bash
+    };
+
+    private static string RuntimeName(ScriptRuntimeKind runtime) => runtime switch
+    {
+        ScriptRuntimeKind.Python3 => "Python 3",
+        ScriptRuntimeKind.PowerShell => "PowerShell",
+        ScriptRuntimeKind.Cmd => "CMD",
+        _ => "Bash"
+    };
+
+    partial void OnSelectedTerminalTabChanged(TerminalTabViewModel? value)
+    {
+        if (!_restoringTerminalWorkspace)
+            _ = SaveTerminalWorkspaceStateAsync();
     }
 
     private bool FilterHost(object item)
@@ -329,30 +595,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         if (host is null)
             return;
 
-        string? savedPassword = null;
-        if (host.AuthenticationMethod == SshAuthenticationMethod.Password
-            && !string.IsNullOrWhiteSpace(host.CredentialReference))
-        {
-            try
-            {
-                savedPassword = await _credentialStore.ReadAsync(host.CredentialReference);
-            }
-            catch (Exception exception)
-            {
-                await _dialogs.ShowErrorAsync($"读取本机保存的密码失败，将改为手动输入。\n\n{exception.Message}");
-            }
-        }
-
-        var credential = await _credentialPrompt.PromptForSecretAsync(host, savedPassword);
-        savedPassword = null;
-        if (credential is null)
-            return;
-        var secret = credential.Secret;
-
         StatusMessage = $"SSH / CONNECTING   ·   {host.HostName}:{host.Port}";
         try
         {
-            var session = await _sshConnector.ConnectAsync(host, secret);
+            var (session, credential) = await ConnectWithCredentialFallbackAsync(
+                host,
+                (secret, token) => _sshConnector.ConnectAsync(host, secret, token),
+                message => _dialogs.ShowErrorAsync(message));
+            if (session is null || credential is null)
+                return;
+
+            var secret = credential.Secret;
 
             var tab = new TerminalTabViewModel(host, session);
             TerminalTabs.Add(tab);
@@ -364,12 +617,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             try
             {
                 var updatedHost = host with { LastConnectedAt = DateTimeOffset.UtcNow };
-                if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice)
+                if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
                 {
                     stagedCredentialReference = await _credentialStore.StoreAsync(secret);
                     updatedHost = updatedHost with { CredentialReference = stagedCredentialReference };
                 }
-                else if (host.AuthenticationMethod == SshAuthenticationMethod.Password
+                else if (host.AuthenticationMethod == SshAuthenticationMethod.Password && !credential.WasSavedCredential
                     && !string.IsNullOrWhiteSpace(host.CredentialReference))
                 {
                     await _credentialStore.DeleteAsync(host.CredentialReference);
@@ -380,7 +633,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 var previousReference = host.CredentialReference;
                 stagedCredentialReference = null;
                 secret = string.Empty;
-                if (credential.RememberOnThisDevice
+                if (credential.RememberOnThisDevice && !credential.WasSavedCredential
                     && !string.IsNullOrWhiteSpace(previousReference))
                     await _credentialStore.DeleteAsync(previousReference);
                 await LoadAsync();
@@ -399,7 +652,6 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            secret = string.Empty;
             StatusMessage = $"SSH / FAILED   ·   {host.HostName}:{host.Port}";
             await _dialogs.ShowErrorAsync($"无法连接到 {host.Name}。\n\n{exception.Message}");
         }
@@ -428,50 +680,62 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     [RelayCommand]
     private async Task ReconnectTerminalAsync(TerminalTabViewModel? tab)
     {
-        if (tab is null || tab.Session.IsConnected)
+        if (tab is null || tab.IsConnected)
             return;
 
-        var host = tab.Host;
-        string? savedPassword = null;
-        if (host.AuthenticationMethod == SshAuthenticationMethod.Password
-            && !string.IsNullOrWhiteSpace(host.CredentialReference))
+        if (tab.Kind == TerminalSessionKind.Local)
         {
-            try { savedPassword = await _credentialStore.ReadAsync(host.CredentialReference); }
-            catch (Exception exception) { await _dialogs.ShowErrorAsync($"读取本机保存的密码失败，将改为手动输入。\n\n{exception.Message}"); }
+            try
+            {
+                var local = _localTerminalConnector.Start(ParseLocalShell(tab.LocalShellId ?? "powershell"), tab.LocalWorkingDirectory);
+                await tab.ReplaceSessionAsync(local);
+                StatusMessage = $"LOCAL / RESTARTED  ·  {tab.LocalShellLabel}";
+            }
+            catch (Exception exception)
+            {
+                StatusMessage = "LOCAL SHELL / RESTART FAILED";
+                await _dialogs.ShowErrorAsync($"无法重新启动本地终端。\n\n{exception.Message}");
+            }
+            return;
         }
 
-        var credential = await _credentialPrompt.PromptForSecretAsync(host, savedPassword);
-        savedPassword = null;
-        if (credential is null)
+        var host = tab.Host;
+        if (host is null)
             return;
-
         StatusMessage = $"SSH / RECONNECTING   ·   {host.HostName}:{host.Port}";
-        var secret = credential.Secret;
-        VirtualTerminal.SecureShellSession session;
+        SecureShellSession session;
+        ConnectionCredential credential;
         try
         {
-            session = await _sshConnector.ConnectAsync(host, secret);
+            var connection = await ConnectWithCredentialFallbackAsync(
+                host,
+                (secret, token) => _sshConnector.ConnectAsync(host, secret, token),
+                message => _dialogs.ShowErrorAsync(message));
+            if (connection.Connection is null || connection.Credential is null)
+                return;
+            session = connection.Connection;
+            credential = connection.Credential;
         }
         catch (Exception exception)
         {
-            secret = string.Empty;
             StatusMessage = $"SSH / RECONNECT FAILED   ·   {host.HostName}:{host.Port}";
             await _dialogs.ShowErrorAsync($"无法重新连接到 {host.Name}。\n\n{exception.Message}");
             return;
         }
 
+        var secret = credential.Secret;
         try
         {
             await tab.ReplaceSessionAsync(session);
             StatusMessage = $"SSH / RECONNECTED   ·   {host.HostName}:{host.Port}";
             var updatedHost = host with { LastConnectedAt = DateTimeOffset.UtcNow };
             string? stagedCredentialReference = null;
-            if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice)
+            if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
             {
                 stagedCredentialReference = await _credentialStore.StoreAsync(secret);
                 updatedHost = updatedHost with { CredentialReference = stagedCredentialReference };
             }
-            else if (host.AuthenticationMethod == SshAuthenticationMethod.Password
+            else if (host.AuthenticationMethod == SshAuthenticationMethod.Password && !credential.WasSavedCredential
                 && !string.IsNullOrWhiteSpace(host.CredentialReference))
             {
                 await _credentialStore.DeleteAsync(host.CredentialReference);
@@ -495,11 +759,69 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void StartLocalShell(string? shellId)
+    {
+        var id = shellId is "cmd" or "pwsh" ? shellId : "powershell";
+        var workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        try
+        {
+            var session = _localTerminalConnector.Start(ParseLocalShell(id), workingDirectory);
+            var tab = new TerminalTabViewModel(null, session, TerminalSessionKind.Local, id, workingDirectory);
+            TerminalTabs.Add(tab);
+            SelectedTerminalTab = tab;
+            ActiveSection = "终端";
+            StatusMessage = $"LOCAL / STARTED  ·  {tab.LocalShellLabel}";
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = "LOCAL SHELL / START FAILED";
+            _ = _dialogs.ShowErrorAsync($"无法启动本地终端。\n\n{exception.Message}");
+        }
+    }
+
+    private static LocalShellKind ParseLocalShell(string shellId) => shellId switch
+    {
+        "cmd" => LocalShellKind.CommandPrompt,
+        "pwsh" => LocalShellKind.PowerShell7,
+        _ => LocalShellKind.PowerShell
+    };
+
+    private async Task SaveTerminalWorkspaceStateAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var tabs = TerminalTabs.Select(tab => tab.Kind == TerminalSessionKind.Local
+                ? new RestorableTerminalTab("local", Shell: tab.LocalShellId, WorkingDirectory: tab.LocalWorkingDirectory)
+                : new RestorableTerminalTab("ssh", HostId: tab.Host?.Id)).ToArray();
+            var selectedIndex = SelectedTerminalTab is null ? -1 : TerminalTabs.IndexOf(SelectedTerminalTab);
+            await _terminalWorkspaceStateStore.SaveAsync(new TerminalWorkspaceState(1, tabs, selectedIndex, ActiveSection), cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not save terminal workspace state: {exception}");
+        }
+    }
+
     public async Task CloseAllTerminalsAsync()
     {
-        foreach (var tab in TerminalTabs.ToArray())
-            await CloseTerminalAsync(tab);
-        await CloseSftpAsync();
+        // Keep the last saved tab list so the next app launch can restore the workspace.
+        // The process cleanup is only for shutdown; it must not be persisted as user-closed tabs.
+        _restoringTerminalWorkspace = true;
+        try
+        {
+            foreach (var tab in TerminalTabs.ToArray())
+            {
+                TerminalTabs.Remove(tab);
+                await tab.DisposeAsync();
+            }
+            SelectedTerminalTab = null;
+            await CloseSftpAsync();
+        }
+        finally
+        {
+            _restoringTerminalWorkspace = false;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanConnectSftp))]
@@ -509,23 +831,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         if (host is null)
             return;
 
-        string? savedPassword = null;
-        if (host.AuthenticationMethod == SshAuthenticationMethod.Password
-            && !string.IsNullOrWhiteSpace(host.CredentialReference))
-        {
-            try { savedPassword = await _credentialStore.ReadAsync(host.CredentialReference); }
-            catch (Exception exception) { await _sftpDialogs.ShowErrorAsync($"读取本机保存的密码失败，将改为手动输入。\n\n{exception.Message}"); }
-        }
-
-        var credential = await _credentialPrompt.PromptForSecretAsync(host, savedPassword);
-        savedPassword = null;
-        if (credential is null)
-            return;
-
         SftpStatus = $"CONNECTING  {host.HostName}:{host.Port}";
+        ConnectionCredential credential;
         try
         {
-            _sftpSession = await _sftpConnector.ConnectAsync(host, credential.Secret);
+            var connection = await ConnectWithCredentialFallbackAsync(
+                host,
+                (secret, token) => _sftpConnector.ConnectAsync(host, secret, token),
+                message => _sftpDialogs.ShowErrorAsync(message));
+            if (connection.Connection is null || connection.Credential is null)
+                return;
+            _sftpSession = connection.Connection;
+            credential = connection.Credential;
             _sftpHost = host;
             OnPropertyChanged(nameof(SftpHost));
             OnPropertyChanged(nameof(IsSftpConnected));
@@ -534,7 +851,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             await RefreshRemoteDirectoryAsync();
             await RefreshLocalDirectoryAsync();
 
-            if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice)
+            if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
             {
                 var reference = await _credentialStore.StoreAsync(credential.Secret);
                 await _hostRepository.SaveAsync(host with { CredentialReference = reference, LastConnectedAt = DateTimeOffset.UtcNow });
@@ -542,7 +859,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                     await _credentialStore.DeleteAsync(host.CredentialReference);
                 await LoadAsync();
             }
-            else if (host.AuthenticationMethod == SshAuthenticationMethod.Password
+            else if (host.AuthenticationMethod == SshAuthenticationMethod.Password && !credential.WasSavedCredential
                 && !string.IsNullOrWhiteSpace(host.CredentialReference))
             {
                 await _credentialStore.DeleteAsync(host.CredentialReference);
@@ -550,6 +867,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 await LoadAsync();
             }
             else if (host.AuthenticationMethod == SshAuthenticationMethod.PrivateKey)
+            {
+                await _hostRepository.SaveAsync(host with { LastConnectedAt = DateTimeOffset.UtcNow });
+                await LoadAsync();
+            }
+            else if (host.AuthenticationMethod == SshAuthenticationMethod.Password && credential.WasSavedCredential)
             {
                 await _hostRepository.SaveAsync(host with { LastConnectedAt = DateTimeOffset.UtcNow });
                 await LoadAsync();
@@ -1254,12 +1576,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 return;
             }
 
-            var remoteIds = merged.Select(host => host.Id).ToHashSet();
-            foreach (var local in await _hostRepository.ListAsync())
-                if (!remoteIds.Contains(local.Id))
-                    await _hostRepository.DeleteAsync(local.Id);
-            foreach (var host in merged)
-                await _hostRepository.SaveAsync(host);
+            await _hostRepository.ReplaceAllAsync(merged);
             await LoadAsync();
             SyncStatus = "SYNC / PULL COMPLETE";
             StatusMessage = "GITHUB / CONFIGURATION PULLED";
@@ -1276,6 +1593,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private void SelectSection(string section)
     {
         ActiveSection = section;
+        if (section == "脚本")
+        {
+            StatusMessage = "SCRIPT CENTER / READY";
+            return;
+        }
         if (!string.Equals(section, "主机", StringComparison.Ordinal))
         {
             StatusMessage = $"{section.ToUpperInvariant()} / NEXT MILESTONE";
@@ -1285,8 +1607,455 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         StatusMessage = $"LOCAL / READY   ·   {HostCount} HOSTS";
     }
 
+    [RelayCommand]
+    private void NewScript()
+    {
+        var runtime = AvailableScriptRuntimeOptions.Contains(SelectedScriptRuntime, StringComparer.Ordinal)
+            ? ParseRuntime(SelectedScriptRuntime)
+            : SelectedScriptExecutionTarget == "本机" ? ScriptRuntimeKind.PowerShell : ScriptRuntimeKind.Bash;
+        SelectedScriptRuntime = RuntimeName(runtime);
+        var content = runtime switch
+        {
+            ScriptRuntimeKind.PowerShell => "Write-Output 'hello from OnlyShell'\nGet-Location\n",
+            ScriptRuntimeKind.Cmd => "@echo off\necho hello from OnlyShell\ncd\n",
+            ScriptRuntimeKind.Python3 => "import os\nprint('hello from OnlyShell')\nprint(os.getcwd())\n",
+            _ => "#!/usr/bin/env bash\nset -euo pipefail\n\necho 'hello from OnlyShell'\n"
+        };
+        var script = new ScriptDefinition(
+            Guid.NewGuid(),
+            "新脚本",
+            runtime,
+            string.Empty,
+            content,
+            DateTimeOffset.UtcNow,
+            ExecutionTarget: SelectedScriptExecutionTarget == "本机" ? "Local" : "Remote");
+        Scripts.Insert(0, script);
+        SelectedScript = script;
+        RebuildScriptCatalogTree();
+        ScriptCenterStatus = "NEW SCRIPT / UNSAVED";
+    }
+
+    [RelayCommand]
+    private async Task SaveScriptAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ScriptName))
+        {
+            ScriptCenterStatus = "SAVE FAILED / SCRIPT NAME REQUIRED";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(ScriptContent))
+        {
+            ScriptCenterStatus = "SAVE FAILED / SCRIPT CONTENT REQUIRED";
+            return;
+        }
+
+        var script = new ScriptDefinition(
+            SelectedScript?.Id ?? Guid.NewGuid(),
+            ScriptName.Trim(),
+            ParseRuntime(SelectedScriptRuntime),
+            ScriptDescription.Trim(),
+            ScriptContent,
+            DateTimeOffset.UtcNow,
+            NormalizeScriptFolderPath(ScriptFolderPath),
+            SelectedScriptExecutionTarget == "本机" ? "Local" : "Remote");
+        try
+        {
+            await _scriptCenterStore.SaveScriptAsync(script);
+            var index = Scripts.IndexOf(SelectedScript!);
+            if (index >= 0)
+                Scripts[index] = script;
+            else
+                Scripts.Insert(0, script);
+            SelectedScript = script;
+            RebuildScriptCatalogTree();
+            ScriptCenterStatus = $"SAVED / {script.Name}";
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "SAVE FAILED";
+            await _syncInteraction.ShowErrorAsync("保存脚本失败", exception.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteScriptAsync()
+    {
+        if (SelectedScript is not { } script)
+            return;
+        if (!await _scriptCenterInteraction.ConfirmDeleteAsync(script))
+            return;
+        try
+        {
+            await _scriptCenterStore.DeleteScriptAsync(script.Id);
+            Scripts.Remove(script);
+            RebuildScriptCatalogTree();
+            SelectedScript = Scripts.FirstOrDefault();
+            ScriptCenterStatus = $"DELETED / {script.Name}";
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "DELETE FAILED";
+            await _syncInteraction.ShowErrorAsync("删除脚本失败", exception.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RunScriptAsync()
+    {
+        if (IsScriptRunning)
+            return;
+        var isLocal = SelectedScriptExecutionTarget == "本机";
+        if (!AvailableScriptRuntimeOptions.Contains(SelectedScriptRuntime, StringComparer.Ordinal))
+        {
+            ScriptCenterStatus = $"RUN BLOCKED / {SelectedScriptRuntime} CANNOT RUN ON {SelectedScriptExecutionTarget}";
+            return;
+        }
+        var host = isLocal ? null : SelectedHost;
+        if (!isLocal && host is null)
+        {
+            ScriptCenterStatus = "RUN BLOCKED / SELECT A HOST IN THE LEFT PANE";
+            return;
+        }
+        if (isLocal && !_localExecutionConfirmed)
+        {
+            if (!await _scriptCenterInteraction.ConfirmLocalExecutionAsync())
+            {
+                ScriptCenterStatus = "RUN CANCELLED / LOCAL EXECUTION NOT CONFIRMED";
+                return;
+            }
+            _localExecutionConfirmed = true;
+        }
+        if (string.IsNullOrWhiteSpace(ScriptName) || string.IsNullOrWhiteSpace(ScriptContent))
+        {
+            ScriptCenterStatus = "RUN BLOCKED / SAVE A SCRIPT FIRST";
+            return;
+        }
+
+        await SaveScriptAsync();
+        if (SelectedScript is not { } script || ScriptCenterStatus.StartsWith("SAVE FAILED", StringComparison.Ordinal))
+            return;
+
+        IsScriptRunning = true;
+        _scriptRunCancellation = new CancellationTokenSource();
+        var cancellationToken = _scriptRunCancellation.Token;
+        var startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var targetName = isLocal ? "本机" : host!.Name;
+        var targetType = isLocal ? "Local" : "Remote";
+        var runtime = ParseRuntime(SelectedScriptRuntime);
+        var runId = Guid.NewGuid();
+        var liveRun = new ScriptRunLog(runId, script.Id, script.Name, host?.Id, targetName, startedAt,
+            0, null, string.Empty, string.Empty, false, targetType);
+        var outputBuffer = new StringBuilder();
+        var errorBuffer = new StringBuilder();
+        var outputLock = new object();
+        SelectedScriptRun = liveRun;
+
+        void OnLocalOutput(string chunk, bool isError)
+        {
+            string outputSnapshot;
+            string errorSnapshot;
+            lock (outputLock)
+            {
+                (isError ? errorBuffer : outputBuffer).Append(chunk);
+                outputSnapshot = outputBuffer.ToString();
+                errorSnapshot = errorBuffer.ToString();
+            }
+
+            _ = Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                if (SelectedScriptRun is { } current && current.Id == runId)
+                    SelectedScriptRun = current with { Output = outputSnapshot, Error = errorSnapshot };
+            });
+        }
+
+        (string Output, string Error) GetCapturedOutput()
+        {
+            lock (outputLock)
+                return (outputBuffer.ToString(), errorBuffer.ToString());
+        }
+
+        ScriptCenterStatus = $"RUNNING / {targetName}";
+        string secret = string.Empty;
+        try
+        {
+            RemoteScriptRunResult result;
+            if (isLocal)
+            {
+                var workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                result = await _localScriptRunner.RunAsync(runtime, ScriptContent, workingDirectory, cancellationToken, OnLocalOutput);
+            }
+            else
+            {
+                var remoteHost = host!;
+                var connection = await ConnectWithCredentialFallbackAsync(
+                    remoteHost,
+                    (value, token) => _remoteScriptRunner.RunAsync(remoteHost, value, runtime, ScriptContent, token),
+                    message => _syncInteraction.ShowErrorAsync("读取本机保存的密码失败，将改为手动输入", message),
+                    cancellationToken);
+                if (connection.Connection is null || connection.Credential is null)
+                {
+                    ScriptCenterStatus = "RUN CANCELLED / CREDENTIAL PROMPT CLOSED";
+                    return;
+                }
+
+                result = connection.Connection;
+                var credential = connection.Credential;
+                secret = credential.Secret;
+                if (remoteHost.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
+                {
+                    var previousReference = remoteHost.CredentialReference;
+                    var stagedCredentialReference = await _credentialStore.StoreAsync(secret, cancellationToken);
+                    try
+                    {
+                        await _hostRepository.SaveAsync(remoteHost with { CredentialReference = stagedCredentialReference }, cancellationToken);
+                    }
+                    catch
+                    {
+                        try { await _credentialStore.DeleteAsync(stagedCredentialReference, CancellationToken.None); }
+                        catch { /* Preserve the host persistence error. */ }
+                        throw;
+                    }
+                    if (!string.IsNullOrWhiteSpace(previousReference) && previousReference != stagedCredentialReference)
+                    {
+                        try { await _credentialStore.DeleteAsync(previousReference, cancellationToken); }
+                        catch { /* The new host credential reference is already committed. */ }
+                    }
+                    await LoadAsync(cancellationToken);
+                    SelectedHost = Hosts.FirstOrDefault(item => item.Id == remoteHost.Id);
+                }
+            }
+            stopwatch.Stop();
+            var log = new ScriptRunLog(
+                runId, script.Id, script.Name, host?.Id, targetName, startedAt,
+                stopwatch.ElapsedMilliseconds, result.ExitCode, result.Output, result.Error, result.ExitCode == 0, targetType);
+            await _scriptCenterStore.AppendRunAsync(log);
+            RecentScriptRuns.Insert(0, log);
+            while (RecentScriptRuns.Count > 100)
+                RecentScriptRuns.RemoveAt(RecentScriptRuns.Count - 1);
+            SelectedScriptRun = log;
+            ScriptCenterStatus = result.ExitCode == 0
+                ? $"SUCCESS / {targetName} / {stopwatch.Elapsed.TotalSeconds:F1}s"
+                : $"FAILED / EXIT {result.ExitCode} / {targetName}";
+            StatusMessage = $"SCRIPT / {(result.ExitCode == 0 ? "SUCCESS" : "FAILED")}  ·  {script.Name}  ·  {targetName}";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            var captured = GetCapturedOutput();
+            var log = new ScriptRunLog(Guid.NewGuid(), script.Id, script.Name, host?.Id, targetName,
+                startedAt, stopwatch.ElapsedMilliseconds, null, captured.Output,
+                string.IsNullOrEmpty(captured.Error) ? "Execution cancelled by user." : $"{captured.Error}\nExecution cancelled by user.", false, targetType);
+            try
+            {
+                await _scriptCenterStore.AppendRunAsync(log);
+                RecentScriptRuns.Insert(0, log);
+                SelectedScriptRun = log;
+            }
+            catch { /* Keep the cancellation state visible if local history storage is unavailable. */ }
+            ScriptCenterStatus = $"CANCELLED / {targetName}";
+        }
+        catch (Exception exception)
+        {
+            stopwatch.Stop();
+            var captured = GetCapturedOutput();
+            var log = new ScriptRunLog(Guid.NewGuid(), script.Id, script.Name, host?.Id, targetName,
+                startedAt, stopwatch.ElapsedMilliseconds, null, captured.Output,
+                string.IsNullOrEmpty(captured.Error) ? exception.Message : $"{captured.Error}\n{exception.Message}", false, targetType);
+            try
+            {
+                await _scriptCenterStore.AppendRunAsync(log);
+                RecentScriptRuns.Insert(0, log);
+                SelectedScriptRun = log;
+            }
+            catch { /* Keep the execution error visible even if local log persistence fails. */ }
+            ScriptCenterStatus = $"FAILED / {targetName}";
+            await _syncInteraction.ShowErrorAsync("脚本执行失败", exception.Message);
+        }
+        finally
+        {
+            secret = string.Empty;
+            _scriptRunCancellation?.Dispose();
+            _scriptRunCancellation = null;
+            IsScriptRunning = false;
+        }
+    }
+
+    [RelayCommand]
+    private void CancelScriptRun() => _scriptRunCancellation?.Cancel();
+
+    private async Task<(T? Connection, ConnectionCredential? Credential)> ConnectWithCredentialFallbackAsync<T>(
+        HostProfile host,
+        Func<string, CancellationToken, Task<T>> connect,
+        Func<string, Task> showCredentialReadError,
+        CancellationToken cancellationToken = default)
+        where T : class
+    {
+        string? savedSecret = null;
+        if (host.AuthenticationMethod == SshAuthenticationMethod.Password
+            && !string.IsNullOrWhiteSpace(host.CredentialReference))
+        {
+            try
+            {
+                savedSecret = await _credentialStore.ReadAsync(host.CredentialReference, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                await showCredentialReadError(exception.Message);
+            }
+        }
+
+        if (host.AuthenticationMethod == SshAuthenticationMethod.Password
+            && !string.IsNullOrWhiteSpace(savedSecret))
+        {
+            try
+            {
+                var connection = await connect(savedSecret, cancellationToken);
+                return (connection, new ConnectionCredential(savedSecret, RememberOnThisDevice: true, WasSavedCredential: true));
+            }
+            catch (SshAuthenticationException)
+            {
+                // The saved password is stale. Ask once for a replacement and
+                // let the successful connection path update the local credential.
+            }
+        }
+
+        var credential = await _credentialPrompt.PromptForSecretAsync(host, savedSecret: null);
+        if (credential is null)
+            return (null, null);
+
+        var authenticatedConnection = await connect(credential.Secret, cancellationToken);
+        return (authenticatedConnection, credential);
+    }
+
+    partial void OnSelectedScriptRunChanged(ScriptRunLog? value)
+    {
+        OnPropertyChanged(nameof(SelectedScriptRunText));
+        if (value is not null)
+            ScriptCenterStatus = $"{(value.Succeeded ? "SUCCESS" : "FAILED")} / {value.HostName} / {value.StartedAt.LocalDateTime:yyyy-MM-dd HH:mm:ss}";
+    }
+
     private bool CanEditSelectedHost() => SelectedHost is not null;
     private bool CanForgetCredential() => !string.IsNullOrWhiteSpace(SelectedHost?.CredentialReference);
+
+    [RelayCommand]
+    private void ToggleScriptCatalog() => IsScriptCatalogExpanded = !IsScriptCatalogExpanded;
+
+    [RelayCommand]
+    private void ToggleRecentRuns() => IsRecentRunsExpanded = !IsRecentRunsExpanded;
+
+    private bool FilterScript(object item)
+    {
+        if (item is not ScriptDefinition script)
+            return false;
+        var query = ScriptSearchText.Trim();
+        return query.Length == 0
+            || script.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || script.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || script.FolderPath.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || script.Runtime.ToString().Contains(query, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    [RelayCommand]
+    private void ToggleScriptFolder(ScriptCatalogNode? node)
+    {
+        if (node is not { IsFolder: true })
+            return;
+        node.IsExpanded = !node.IsExpanded;
+        RebuildVisibleScriptCatalogNodes();
+    }
+
+    private void RebuildScriptCatalogTree()
+    {
+        var folderExpansion = EnumerateScriptCatalogNodes(ScriptCatalogNodes)
+            .Where(node => node.IsFolder)
+            .ToDictionary(node => node.FolderPath, node => node.IsExpanded, StringComparer.OrdinalIgnoreCase);
+        ScriptCatalogNodes.Clear();
+        VisibleScriptCatalogNodes.Clear();
+
+        var folders = new Dictionary<string, ScriptCatalogNode>(StringComparer.OrdinalIgnoreCase);
+        var query = ScriptSearchText.Trim();
+        foreach (var script in Scripts.Where(script => MatchesScriptSearch(script, query)))
+        {
+            var segments = script.FolderPath.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var siblings = ScriptCatalogNodes;
+            var pathSegments = new List<string>();
+            foreach (var segment in segments)
+            {
+                pathSegments.Add(segment);
+                var path = string.Join('/', pathSegments);
+                if (!folders.TryGetValue(path, out var folder))
+                {
+                    var isExpanded = query.Length > 0
+                        || !folderExpansion.TryGetValue(path, out var wasExpanded)
+                        || wasExpanded;
+                    folder = new ScriptCatalogNode(segment, path) { IsExpanded = isExpanded };
+                    folders.Add(path, folder);
+                    siblings.Add(folder);
+                }
+                siblings = folder.Children;
+            }
+
+            siblings.Add(new ScriptCatalogNode(script.Name, script.FolderPath, script));
+        }
+
+        SortScriptCatalogNodes(ScriptCatalogNodes);
+        RebuildVisibleScriptCatalogNodes();
+        SelectedScriptCatalogNode = VisibleScriptCatalogNodes.FirstOrDefault(node => node.Script?.Id == SelectedScript?.Id);
+    }
+
+    private void RebuildVisibleScriptCatalogNodes()
+    {
+        VisibleScriptCatalogNodes.Clear();
+        AddVisibleScriptNodes(ScriptCatalogNodes, []);
+    }
+
+    private void AddVisibleScriptNodes(IReadOnlyList<ScriptCatalogNode> siblings, IReadOnlyList<bool> ancestorHasFollowingSibling)
+    {
+        for (var index = 0; index < siblings.Count; index++)
+        {
+            var node = siblings[index];
+            var hasFollowingSibling = index < siblings.Count - 1;
+            node.SetTreePresentation(ancestorHasFollowingSibling.Count, ancestorHasFollowingSibling, hasFollowingSibling);
+            VisibleScriptCatalogNodes.Add(node);
+
+            if (node.IsFolder && node.IsExpanded)
+                AddVisibleScriptNodes(node.Children, [.. ancestorHasFollowingSibling, hasFollowingSibling]);
+        }
+    }
+
+    private bool MatchesScriptSearch(ScriptDefinition script, string query) => query.Length == 0
+        || script.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || script.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || script.FolderPath.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || script.Runtime.ToString().Contains(query, StringComparison.CurrentCultureIgnoreCase);
+
+    private static IEnumerable<ScriptCatalogNode> EnumerateScriptCatalogNodes(IEnumerable<ScriptCatalogNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in EnumerateScriptCatalogNodes(node.Children))
+                yield return child;
+        }
+    }
+
+    private static void SortScriptCatalogNodes(ObservableCollection<ScriptCatalogNode> nodes)
+    {
+        var sorted = nodes.OrderByDescending(node => node.IsFolder)
+            .ThenBy(node => node.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        nodes.Clear();
+        foreach (var node in sorted)
+        {
+            SortScriptCatalogNodes(node.Children);
+            nodes.Add(node);
+        }
+    }
+
+    private static string NormalizeScriptFolderPath(string path) => string.Join('/',
+        path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(segment => segment is not "." and not ".."));
 
     private async Task SaveAndRefreshAsync(HostProfile profile)
     {
