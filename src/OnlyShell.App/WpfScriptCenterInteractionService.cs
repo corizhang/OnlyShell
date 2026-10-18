@@ -1,10 +1,17 @@
 using System.Windows;
+using OnlyShell.Core.Hosts;
 using OnlyShell.Core.Scripts;
 
 namespace OnlyShell.App;
 
 public sealed class WpfScriptCenterInteractionService : IScriptCenterInteractionService
 {
+    public Task<IReadOnlyList<HostProfile>?> SelectHostsForBatchAsync(IReadOnlyList<HostProfile> hosts, Guid? initiallySelectedHostId)
+    {
+        var window = new ScriptHostSelectionWindow(hosts, initiallySelectedHostId) { Owner = Application.Current.MainWindow };
+        return Task.FromResult(window.ShowDialog() == true ? window.SelectedHosts : null);
+    }
+
     public Task<bool> ConfirmDeleteAsync(ScriptDefinition script)
     {
         var result = MessageBox.Show(
@@ -25,5 +32,13 @@ public sealed class WpfScriptCenterInteractionService : IScriptCenterInteraction
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
         return Task.FromResult(result == MessageBoxResult.Yes);
+    }
+
+    public Task<ScriptExecutionInputs?> PromptForExecutionInputsAsync(
+        ScriptExecutionInputs initialInputs,
+        IReadOnlyList<ScriptInputFieldDefinition> fields)
+    {
+        var window = new ScriptRunInputsWindow(initialInputs, fields) { Owner = Application.Current.MainWindow };
+        return Task.FromResult(window.ShowDialog() == true ? window.Inputs : null);
     }
 }

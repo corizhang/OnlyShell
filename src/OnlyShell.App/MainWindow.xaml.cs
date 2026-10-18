@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using System.Windows.Controls;
 using System.Xml;
 using System.IO;
+using Microsoft.Win32;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using ICSharpCode.AvalonEdit;
@@ -22,9 +23,43 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        DiagnosticLogPathText.Text = ApplicationDiagnostics.DirectoryPath;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         ScriptCodeEditor.Text = _viewModel.ScriptContent;
         UpdateScriptEditorHighlighting();
+    }
+
+    private void ExportDiagnostics_Click(object sender, RoutedEventArgs e)
+    {
+        var confirmation = MessageBox.Show(
+            "诊断包包含应用日志。日志可能记录主机地址或异常上下文。请在分享前检查文件内容。是否继续导出？",
+            "OnlyShell / Export Diagnostics",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes)
+            return;
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "导出 OnlyShell 诊断包",
+            Filter = "ZIP archive (*.zip)|*.zip",
+            FileName = $"OnlyShell-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+            AddExtension = true,
+            DefaultExt = ".zip"
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            ApplicationDiagnostics.Export(dialog.FileName);
+            MessageBox.Show($"诊断包已导出：\n{dialog.FileName}", "OnlyShell / Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("DIAGNOSTICS", "Could not export diagnostic archive.", exception);
+            MessageBox.Show($"导出诊断包失败：{exception.Message}", "OnlyShell / Diagnostics", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -44,6 +79,19 @@ public partial class MainWindow : Window
     {
         if (sender is TextEditor editor && editor.Text != _viewModel.ScriptContent)
             _viewModel.ScriptContent = editor.Text;
+    }
+
+    private void TemplateSecretDefaultBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox && passwordBox.DataContext is ScriptTemplateFieldViewModel field)
+            passwordBox.Password = field.DefaultValue;
+    }
+
+    private void TemplateSecretDefaultBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox && passwordBox.DataContext is ScriptTemplateFieldViewModel field
+            && field.DefaultValue != passwordBox.Password)
+            field.DefaultValue = passwordBox.Password;
     }
 
     private void UpdateScriptEditorHighlighting()

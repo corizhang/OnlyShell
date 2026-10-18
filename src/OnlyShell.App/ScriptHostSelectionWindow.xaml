@@ -1,0 +1,32 @@
+<Window x:Class="OnlyShell.App.ScriptHostSelectionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="选择脚本目标主机" Width="520" Height="560" MinWidth="420" MinHeight="360"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{StaticResource CanvasBrush}" Foreground="{StaticResource TextBrush}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,10">
+            <TextBlock Text="// BATCH_SCRIPT_TARGETS" Foreground="{StaticResource SyntaxCyanBrush}" FontFamily="Cascadia Code" FontSize="10"/>
+            <TextBlock Text="脚本将按列表顺序逐台执行。每台主机分别记录结果；某台失败不会阻止后续主机。" Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,5,0,0"/>
+        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="HostsPanel">
+                <ItemsControl.ItemTemplate><DataTemplate>
+                    <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="8,6">
+                        <StackPanel>
+                            <CheckBox IsChecked="{Binding IsSelected}" Checked="HostSelectionChanged" Unchecked="HostSelectionChanged" Content="{Binding Host.Name}" Foreground="{StaticResource TextBrush}"/>
+                            <TextBlock Text="{Binding Endpoint}" Foreground="{StaticResource MutedBrush}" FontFamily="Cascadia Code" FontSize="9" Margin="22,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="SelectionCount" Foreground="{StaticResource MutedBrush}" FontSize="9" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="CANCEL" IsCancel="True" MinWidth="86" Margin="0,0,8,0" Padding="10,6" Background="Transparent" Foreground="{StaticResource MutedBrush}" BorderBrush="{StaticResource LineBrush}"/>
+            <Button Grid.Column="2" Content="NEXT" IsDefault="True" Click="Continue_Click" MinWidth="86" Padding="10,6" Background="{StaticResource AccentBrush}" Foreground="#17151A" BorderThickness="0"/>
+        </Grid>
+    </Grid>
+</Window>

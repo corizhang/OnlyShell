@@ -8,6 +8,9 @@ public sealed class WpfConnectionCredentialPrompt : IConnectionCredentialPrompt
 {
     public Task<ConnectionCredential?> PromptForSecretAsync(HostProfile host, string? savedSecret)
     {
+        var dispatcher = Application.Current.Dispatcher;
+        if (!dispatcher.CheckAccess())
+            return dispatcher.InvokeAsync(() => PromptForSecretAsync(host, savedSecret)).Task.Unwrap();
         var dialog = new CredentialPromptWindow(host, savedSecret) { Owner = Application.Current.MainWindow };
         return Task.FromResult(dialog.ShowDialog() == true && dialog.Password is { } password
             ? new ConnectionCredential(password, dialog.RememberOnThisDevice)

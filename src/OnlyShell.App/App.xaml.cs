@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OnlyShell.Core.Hosts;
@@ -24,6 +25,10 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        ApplicationDiagnostics.Write("APP", $"Starting OnlyShell {typeof(App).Assembly.GetName().Version}; args={e.Args.Length}");
 
         try
         {
@@ -32,6 +37,7 @@ public partial class App : Application
             builder.Services.AddSingleton<IHostRepository>(provider => provider.GetRequiredService<SqliteHostRepository>());
             builder.Services.AddSingleton<IKnownHostRepository>(_ => new SqliteKnownHostRepository(GetDatabasePath()));
             builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
+            builder.Services.AddSingleton<IScriptExecutionInputsStore, WindowsProtectedScriptInputsStore>();
             builder.Services.AddSingleton<ISshTerminalConnector, SshTerminalConnector>();
             builder.Services.AddSingleton<ILocalTerminalConnector, LocalTerminalConnector>();
             builder.Services.AddSingleton<IRemoteScriptRunner, RemoteScriptRunner>();
@@ -61,20 +67,10 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
-            var logPath = Path.Combine(Path.GetTempPath(), "OnlyShell-startup-error.log");
-            try
-            {
-                File.WriteAllText(
-                    logPath,
-                    $"[{DateTimeOffset.Now:O}] Startup failed.{Environment.NewLine}{exception}");
-            }
-            catch
-            {
-                logPath = "(无法写入临时日志文件)";
-            }
+            ApplicationDiagnostics.Write("STARTUP", "Application startup failed.", exception);
 
             MessageBox.Show(
-                $"OnlyShell 无法启动。\n\n{exception.Message}\n\n详细信息：{logPath}",
+                $"OnlyShell 无法启动。\n\n{exception.Message}\n\n详细信息已写入：{ApplicationDiagnostics.CurrentLogPath}",
                 "OnlyShell / Startup Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -84,9 +80,19 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        ApplicationDiagnostics.Write("APP", $"Application exiting with code {e.ApplicationExitCode}.");
         _applicationHost?.Dispose();
         base.OnExit(e);
     }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e) =>
+        ApplicationDiagnostics.Write("UI-UNHANDLED", "Unhandled UI dispatcher exception.", e.Exception);
+
+    private static void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e) =>
+        ApplicationDiagnostics.Write("PROCESS-UNHANDLED", $"Unhandled process exception; terminating={e.IsTerminating}.", e.ExceptionObject as Exception);
+
+    private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) =>
+        ApplicationDiagnostics.Write("TASK-UNOBSERVED", "Unobserved task exception.", e.Exception);
 
     private static string GetDatabasePath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

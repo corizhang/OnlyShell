@@ -4,6 +4,7 @@ using OnlyShell.Core.Security;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
+using System.Security.Cryptography;
 
 namespace OnlyShell.Infrastructure.Ssh;
 
@@ -68,14 +69,59 @@ internal sealed class SftpSession(SftpClient client) : ISftpSession
         // Progress<T> can dispatch a report after cancellation has closed the stream.
         // Capture its length up front so late callbacks never touch a disposed FileStream.
         var totalBytes = input.Length;
-        var report = progress is null ? null : new Progress<UploadFileProgressReport>(value =>
-            progress.Report(totalBytes == 0 ? 100 : Math.Clamp(value.TotalBytesUploaded * 100d / totalBytes, 0, 100)));
-        var temporaryPath = $"{remotePath}.onlyshell-{Guid.NewGuid():N}.uploading";
+        var temporaryPath = $"{remotePath}.onlyshell-resume.uploading";
         string? backupPath = null;
         try
         {
-            await client.UploadFileAsync(input, temporaryPath, canOverride: false, report, cancellationToken);
+            var temporaryAttributes = await GetRemoteAttributesOrNullAsync(temporaryPath);
+            if (temporaryAttributes is { IsDirectory: true } or { IsSymbolicLink: true })
+                throw new IOException($"上传暂存目标不是普通文件，已停止以避免覆盖：{temporaryPath}");
+            var offset = 0L;
+            if (temporaryAttributes is not null && temporaryAttributes.Size > 0 && temporaryAttributes.Size <= totalBytes)
+            {
+                var partialSize = (long)temporaryAttributes.Size;
+                input.Position = 0;
+                await using var remotePartial = client.OpenRead(temporaryPath);
+                var localPrefixHash = await HashPrefixAsync(input, partialSize, cancellationToken);
+                var remotePrefixHash = await HashPrefixAsync(remotePartial, partialSize, cancellationToken);
+                if (CryptographicOperations.FixedTimeEquals(localPrefixHash, remotePrefixHash))
+                    offset = partialSize;
+            }
+            if (offset == 0 && temporaryAttributes is not null)
+                await client.DeleteFileAsync(temporaryPath, cancellationToken);
+
+            input.Position = offset;
+            await using (var remoteOutput = client.Open(temporaryPath,
+                offset == 0 ? FileMode.Create : FileMode.Open, FileAccess.Write))
+            {
+                remoteOutput.Position = offset;
+                var buffer = new byte[128 * 1024];
+                var copied = offset;
+                progress?.Report(totalBytes == 0 ? 100 : Math.Clamp(copied * 100d / totalBytes, 0, 100));
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer, cancellationToken);
+                    if (read == 0)
+                        break;
+                    await remoteOutput.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    copied += read;
+                    progress?.Report(totalBytes == 0 ? 100 : Math.Clamp(copied * 100d / totalBytes, 0, 100));
+                }
+                await remoteOutput.FlushAsync(cancellationToken);
+            }
             cancellationToken.ThrowIfCancellationRequested();
+
+            var uploadedAttributes = await client.GetAttributesAsync(temporaryPath, cancellationToken);
+            if ((long)uploadedAttributes.Size != totalBytes)
+                throw new IOException($"上传完整性校验失败：本地 {totalBytes} 字节，远程临时文件 {uploadedAttributes.Size} 字节。原目标文件未替换。 ");
+            input.Position = 0;
+            var localHash = await SHA256.HashDataAsync(input, cancellationToken);
+            await using (var remoteFile = client.OpenRead(temporaryPath))
+            {
+                var remoteHash = await SHA256.HashDataAsync(remoteFile, cancellationToken);
+                if (!CryptographicOperations.FixedTimeEquals(localHash, remoteHash))
+                    throw new IOException($"上传 SHA-256 校验失败：本地 {Convert.ToHexString(localHash)}，远程临时文件 {Convert.ToHexString(remoteHash)}。原目标文件未替换。");
+            }
 
             var existingAttributes = await GetRemoteAttributesOrNullAsync(remotePath);
             if (existingAttributes?.IsSymbolicLink == true)
@@ -104,7 +150,6 @@ internal sealed class SftpSession(SftpClient client) : ISftpSession
         }
         catch
         {
-            await TryDeleteRemoteFileAsync(temporaryPath);
             if (backupPath is not null
                 && await GetRemoteAttributesOrNullAsync(backupPath) is not null
                 && await GetRemoteAttributesOrNullAsync(remotePath) is null)
@@ -115,24 +160,81 @@ internal sealed class SftpSession(SftpClient client) : ISftpSession
 
     public async Task DownloadAsync(string remotePath, string localPath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
-        var size = (long)(await client.GetAttributesAsync(remotePath, cancellationToken)).Size;
-        var temporaryPath = $"{localPath}.onlyshell-{Guid.NewGuid():N}.downloading";
-        var report = progress is null ? null : new Progress<DownloadFileProgressReport>(value =>
-            progress.Report(size == 0 ? 100 : Math.Clamp(value.TotalBytesDownloaded * 100d / size, 0, 100)));
-        try
+        var attributes = await client.GetAttributesAsync(remotePath, cancellationToken);
+        if (attributes.IsDirectory || attributes.IsSymbolicLink)
+            throw new IOException($"只支持下载普通文件：{remotePath}");
+        var size = (long)attributes.Size;
+        var temporaryPath = $"{localPath}.onlyshell-resume.downloading";
+        var offset = 0L;
+        await using var remoteFile = client.OpenRead(remotePath);
+        if (File.Exists(temporaryPath))
         {
-            await using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true))
-                await client.DownloadFileAsync(remotePath, output, report, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporaryPath, localPath, overwrite: true);
+            var partialSize = new FileInfo(temporaryPath).Length;
+            if (partialSize <= size && partialSize > 0)
+            {
+                bool prefixMatches;
+                await using (var localPartial = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, useAsync: true))
+                {
+                    var remotePrefixHash = await HashPrefixAsync(remoteFile, partialSize, cancellationToken);
+                    var localPrefixHash = await HashPrefixAsync(localPartial, partialSize, cancellationToken);
+                    prefixMatches = CryptographicOperations.FixedTimeEquals(remotePrefixHash, localPrefixHash);
+                }
+                if (prefixMatches)
+                    offset = partialSize;
+                else
+                    File.Delete(temporaryPath);
+            }
+            else
+                File.Delete(temporaryPath);
         }
-        catch
+
+        remoteFile.Position = offset;
+        await using var output = new FileStream(temporaryPath, offset == 0 ? FileMode.Create : FileMode.Append,
+            FileAccess.Write, FileShare.None, 128 * 1024, useAsync: true);
+        var buffer = new byte[128 * 1024];
+        var copied = offset;
+        progress?.Report(size == 0 ? 100 : Math.Clamp(copied * 100d / size, 0, 100));
+        while (true)
         {
-            try { File.Delete(temporaryPath); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-            throw;
+            var read = await remoteFile.ReadAsync(buffer, cancellationToken);
+            if (read == 0)
+                break;
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            copied += read;
+            progress?.Report(size == 0 ? 100 : Math.Clamp(copied * 100d / size, 0, 100));
         }
+        await output.FlushAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (new FileInfo(temporaryPath).Length != size)
+            throw new IOException($"下载完整性校验失败：远程 {size} 字节，本地临时文件 {new FileInfo(temporaryPath).Length} 字节。可重试以续传；原目标文件未替换。");
+        remoteFile.Position = 0;
+        byte[] remoteHash;
+        byte[] localHash;
+        await using (var localFile = new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, useAsync: true))
+        {
+            remoteHash = await SHA256.HashDataAsync(remoteFile, cancellationToken);
+            localHash = await SHA256.HashDataAsync(localFile, cancellationToken);
+        }
+        if (!CryptographicOperations.FixedTimeEquals(remoteHash, localHash))
+            throw new IOException($"下载 SHA-256 校验失败：远程 {Convert.ToHexString(remoteHash)}，本地临时文件 {Convert.ToHexString(localHash)}。原目标文件未替换。");
+        File.Move(temporaryPath, localPath, overwrite: true);
+    }
+
+    private static async Task<byte[]> HashPrefixAsync(Stream stream, long length, CancellationToken cancellationToken)
+    {
+        stream.Position = 0;
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[128 * 1024];
+        var remaining = length;
+        while (remaining > 0)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), cancellationToken);
+            if (read == 0)
+                throw new EndOfStreamException("无法校验暂存文件前缀；远端文件可能已发生变化。");
+            hash.AppendData(buffer, 0, read);
+            remaining -= read;
+        }
+        return hash.GetHashAndReset();
     }
 
     private async Task<SftpFileAttributes?> GetRemoteAttributesOrNullAsync(string path)

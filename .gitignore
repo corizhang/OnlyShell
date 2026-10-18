@@ -18,6 +18,7 @@ logs/
 # Generated packages
 *.nupkg
 *.snupkg
+artifacts/
 
 # OS noise
 Thumbs.db

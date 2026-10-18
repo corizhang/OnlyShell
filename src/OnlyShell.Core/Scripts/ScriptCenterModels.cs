@@ -10,6 +10,25 @@ public enum ScriptRuntimeKind
     Cmd
 }
 
+public enum ScriptInputValueType
+{
+    Text,
+    Number,
+    Boolean,
+    Path,
+    Choice,
+    Secret
+}
+
+public sealed record ScriptInputFieldDefinition(
+    string Kind,
+    string Name,
+    ScriptInputValueType ValueType = ScriptInputValueType.Text,
+    bool IsRequired = false,
+    bool IsSensitive = false,
+    string Options = "",
+    string Group = "");
+
 public sealed record ScriptDefinition(
     Guid Id,
     string Name,
@@ -18,7 +37,9 @@ public sealed record ScriptDefinition(
     string Content,
     DateTimeOffset UpdatedAt,
     string FolderPath = "",
-    string ExecutionTarget = "Remote");
+    string ExecutionTarget = "Remote",
+    string InputTemplate = "",
+    IReadOnlyList<ScriptInputFieldDefinition>? InputFields = null);
 
 public sealed record ScriptRunLog(
     Guid Id,
@@ -36,6 +57,10 @@ public sealed record ScriptRunLog(
 
 public sealed record RemoteScriptRunResult(int ExitCode, string Output, string Error);
 
+public sealed record ScriptExecutionInputs(
+    IReadOnlyList<string> Arguments,
+    IReadOnlyDictionary<string, string> EnvironmentVariables);
+
 public interface IScriptCenterStore
 {
     Task<IReadOnlyList<ScriptDefinition>> LoadScriptsAsync(CancellationToken cancellationToken = default);
@@ -45,6 +70,15 @@ public interface IScriptCenterStore
     Task AppendRunAsync(ScriptRunLog run, CancellationToken cancellationToken = default);
 }
 
+public interface IScriptExecutionInputsStore
+{
+    Task<ScriptExecutionInputs?> LoadAsync(Guid scriptId, CancellationToken cancellationToken = default);
+    Task SaveAsync(Guid scriptId, ScriptExecutionInputs inputs, CancellationToken cancellationToken = default);
+    Task<ScriptExecutionInputs?> LoadDefaultsAsync(Guid scriptId, CancellationToken cancellationToken = default);
+    Task SaveDefaultsAsync(Guid scriptId, ScriptExecutionInputs inputs, CancellationToken cancellationToken = default);
+    Task DeleteAsync(Guid scriptId, CancellationToken cancellationToken = default);
+}
+
 public interface IRemoteScriptRunner
 {
     Task<RemoteScriptRunResult> RunAsync(
@@ -52,6 +86,7 @@ public interface IRemoteScriptRunner
         string secret,
         ScriptRuntimeKind runtime,
         string content,
+        ScriptExecutionInputs inputs,
         CancellationToken cancellationToken = default);
 }
 
@@ -61,6 +96,7 @@ public interface ILocalScriptRunner
         ScriptRuntimeKind runtime,
         string content,
         string workingDirectory,
+        ScriptExecutionInputs inputs,
         CancellationToken cancellationToken = default,
         Action<string, bool>? outputReceived = null);
 }
@@ -69,4 +105,8 @@ public interface IScriptCenterInteractionService
 {
     Task<bool> ConfirmDeleteAsync(ScriptDefinition script);
     Task<bool> ConfirmLocalExecutionAsync();
+    Task<IReadOnlyList<HostProfile>?> SelectHostsForBatchAsync(IReadOnlyList<HostProfile> hosts, Guid? initiallySelectedHostId);
+    Task<ScriptExecutionInputs?> PromptForExecutionInputsAsync(
+        ScriptExecutionInputs initialInputs,
+        IReadOnlyList<ScriptInputFieldDefinition> fields);
 }

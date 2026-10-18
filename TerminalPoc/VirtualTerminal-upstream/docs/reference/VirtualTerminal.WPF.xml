@@ -553,6 +553,9 @@
             buffer, not by scrolling a huge child element.
             </summary>
         </member>
+        <member name="E:VirtualTerminal.TerminalControl.SelectionStateChanged">
+            <summary>Raised when local text selection changes or a drag selection completes.</summary>
+        </member>
         <member name="F:VirtualTerminal.TerminalControl.CopyCommand">
             <summary>Copies the current selection to the clipboard.</summary>
         </member>
@@ -580,6 +583,9 @@
             <summary>
             Gets or sets whether this control should forward keyboard input directly into the session.
             </summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalControl.ConfirmMultiLinePaste">
+            <summary>Gets or sets whether pasting clipboard content containing line breaks requires confirmation.</summary>
         </member>
         <member name="P:VirtualTerminal.TerminalControl.ScrollDownVisible">
             <summary>
@@ -640,11 +646,26 @@
         <member name="M:VirtualTerminal.TerminalControl.SelectAll">
             <summary>Selects the entire visible screen.</summary>
         </member>
+        <member name="M:VirtualTerminal.TerminalControl.CopySelectionToClipboard">
+            <summary>Copies the current terminal selection to the system clipboard.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.PasteFromClipboardAsync">
+            <summary>Pastes clipboard text into the terminal session.</summary>
+        </member>
         <member name="M:VirtualTerminal.TerminalControl.Clear">
             <summary>Clears the terminal screen and moves the cursor to the home position.</summary>
         </member>
         <member name="M:VirtualTerminal.TerminalControl.OnRender(System.Windows.Media.DrawingContext)">
             <inheritdoc />
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.FindTextMatchCount(System.String)">
+            <summary>Returns the number of case-insensitive matches currently held in scrollback and the screen.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.NavigateToTextMatch(System.String,System.Int32)">
+            <summary>Scrolls to and outlines the zero-based case-insensitive match occurrence.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.ClearTextSearch">
+            <summary>Clears the active search-result outline.</summary>
         </member>
         <member name="M:VirtualTerminal.TerminalControl.OnRenderSizeChanged(System.Windows.SizeChangedInfo)">
             <inheritdoc />
@@ -750,6 +771,21 @@
         </member>
         <member name="F:VirtualTerminal.TerminalControl.AutoScrollingProperty">
             <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.AutoScrolling"/> dependency property.</summary>
+        </member>
+        <member name="T:VirtualTerminal.TerminalSelectionStateEventArgs">
+            <summary>Selection state and pointer location reported by <see cref="T:VirtualTerminal.TerminalControl"/>.</summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalSelectionStateEventArgs.#ctor(System.Boolean,System.Boolean,System.Windows.Point)">
+            <summary>Selection state and pointer location reported by <see cref="T:VirtualTerminal.TerminalControl"/>.</summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalSelectionStateEventArgs.HasSelection">
+            <summary>Gets whether the terminal currently has a non-empty selection.</summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalSelectionStateEventArgs.Completed">
+            <summary>Gets whether a mouse drag selection has just completed.</summary>
+        </member>
+        <member name="P:VirtualTerminal.TerminalSelectionStateEventArgs.Anchor">
+            <summary>Gets the selection end pointer location relative to the terminal control.</summary>
         </member>
     </members>
 </doc>

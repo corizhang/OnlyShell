@@ -16,10 +16,12 @@ public sealed class RemoteScriptRunner(
         string secret,
         ScriptRuntimeKind runtime,
         string content,
+        ScriptExecutionInputs inputs,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(content);
-        var commandText = BuildCommand(runtime, content);
+        ArgumentNullException.ThrowIfNull(inputs);
+        var commandText = BuildCommand(runtime, content, inputs);
         using var client = new SshClient(SshConnectionInfoFactory.Create(host, secret));
         client.KeepAliveInterval = TimeSpan.FromSeconds(30);
         client.HostKeyReceived += (_, key) =>
@@ -46,14 +48,19 @@ public sealed class RemoteScriptRunner(
         }
     }
 
-    private static string BuildCommand(ScriptRuntimeKind runtime, string content)
+    private static string BuildCommand(ScriptRuntimeKind runtime, string content, ScriptExecutionInputs inputs)
     {
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
+        var environment = string.Join(" ", inputs.EnvironmentVariables.Select(pair => QuoteShellArgument($"{pair.Key}={pair.Value}")));
+        var prefix = string.IsNullOrEmpty(environment) ? "" : environment + " ";
+        var arguments = string.Join(" ", inputs.Arguments.Select(QuoteShellArgument));
         return runtime switch
         {
-            ScriptRuntimeKind.Bash => $"printf '%s' '{encoded}' | base64 -d | bash -s",
-            ScriptRuntimeKind.Python3 => $"python3 -c \"import base64;exec(compile(base64.b64decode('{encoded}'), '<onlyshell>', 'exec'))\"",
+            ScriptRuntimeKind.Bash => $"printf '%s' '{encoded}' | base64 -d | env {prefix}bash -s -- {arguments}",
+            ScriptRuntimeKind.Python3 => $"env {prefix}python3 -c \"import base64;exec(compile(base64.b64decode('{encoded}'), '<onlyshell>', 'exec'))\" {arguments}",
             _ => throw new ArgumentOutOfRangeException(nameof(runtime))
         };
     }
+
+    private static string QuoteShellArgument(string value) => $"'{value.Replace("'", "'\"'\"'")}'";
 }

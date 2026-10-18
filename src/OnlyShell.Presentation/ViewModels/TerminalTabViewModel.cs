@@ -1,4 +1,6 @@
 using System.Windows.Threading;
+using System.Collections.ObjectModel;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OnlyShell.Core.Hosts;
 using OnlyShell.Terminal;
@@ -16,6 +18,7 @@ public enum TerminalSessionKind
 
 public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDisposable
 {
+    private const int MetricsHistoryLimit = 60;
     private readonly DispatcherTimer _connectionMonitor;
     private readonly DispatcherTimer _metricsTimer;
     private readonly LinuxServerMetricsCollector _metricsCollector = new();
@@ -69,6 +72,30 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
     public double MemoryProgress => Metrics?.MemoryPercent ?? 0;
     public double SwapProgress => Metrics?.SwapPercent ?? 0;
     public double DiskProgress => Metrics?.DiskPercent ?? 0;
+    public ObservableCollection<ServerMetricsHistorySample> MetricsHistory { get; } = [];
+    public double NetworkTotalBytesPerSecond => Metrics is { } metrics
+        ? metrics.NetworkReceiveBytesPerSecond + metrics.NetworkTransmitBytesPerSecond
+        : 0;
+    public int MonitorWarningThreshold => int.TryParse(MonitorWarningThresholdText, out var value)
+        ? Math.Clamp(value, 1, 100)
+        : 90;
+    public string MetricsAlertText
+    {
+        get
+        {
+            if (Metrics is not { } metrics)
+                return "NO DATA";
+            var threshold = MonitorWarningThreshold;
+            var alerts = new List<string>(3);
+            if (metrics.CpuPercent is { } cpu && cpu >= threshold) alerts.Add($"CPU {cpu:F0}%");
+            if (metrics.MemoryPercent >= threshold) alerts.Add($"MEM {metrics.MemoryPercent:F0}%");
+            if (metrics.DiskPercent >= threshold) alerts.Add($"DISK {metrics.DiskPercent:F0}%");
+            return alerts.Count == 0 ? "NORMAL" : $"ALERT / {string.Join(" · ", alerts)}";
+        }
+    }
+    public Brush MetricsAlertBrush => MetricsAlertText.StartsWith("ALERT", StringComparison.Ordinal)
+        ? new SolidColorBrush(Color.FromRgb(255, 105, 97))
+        : new SolidColorBrush(Color.FromRgb(91, 220, 144));
 
     [ObservableProperty]
     private string status = "DISCONNECTED";
@@ -84,6 +111,9 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
 
     [ObservableProperty]
     private DateTimeOffset? metricsUpdatedAt;
+
+    [ObservableProperty]
+    private string monitorWarningThresholdText = "90";
 
     public TerminalTabViewModel(HostProfile host, SecureShellSession session)
         : this(host, session, TerminalSessionKind.Ssh)
@@ -140,7 +170,17 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
     partial void OnMetricsChanged(ServerMetricsSnapshot? value)
     {
         if (value is not null)
+        {
             MetricsUpdatedAt = DateTimeOffset.UtcNow;
+            MetricsHistory.Add(new ServerMetricsHistorySample(
+                MetricsUpdatedAt.Value,
+                value.CpuPercent ?? 0,
+                value.MemoryPercent,
+                value.DiskPercent,
+                value.NetworkReceiveBytesPerSecond + value.NetworkTransmitBytesPerSecond));
+            while (MetricsHistory.Count > MetricsHistoryLimit)
+                MetricsHistory.RemoveAt(0);
+        }
         OnPropertyChanged(nameof(CpuMetricText));
         OnPropertyChanged(nameof(MemoryMetricText));
         OnPropertyChanged(nameof(DiskMetricText));
@@ -154,6 +194,16 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
         OnPropertyChanged(nameof(MemoryProgress));
         OnPropertyChanged(nameof(SwapProgress));
         OnPropertyChanged(nameof(DiskProgress));
+        OnPropertyChanged(nameof(NetworkTotalBytesPerSecond));
+        OnPropertyChanged(nameof(MetricsAlertText));
+        OnPropertyChanged(nameof(MetricsAlertBrush));
+    }
+
+    partial void OnMonitorWarningThresholdTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(MonitorWarningThreshold));
+        OnPropertyChanged(nameof(MetricsAlertText));
+        OnPropertyChanged(nameof(MetricsAlertBrush));
     }
 
     partial void OnMetricsUpdatedAtChanged(DateTimeOffset? value) => OnPropertyChanged(nameof(MetricsUpdatedText));
@@ -261,3 +311,10 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
         Status = "DISCONNECTED";
     }
 }
+
+public sealed record ServerMetricsHistorySample(
+    DateTimeOffset Timestamp,
+    double CpuPercent,
+    double MemoryPercent,
+    double DiskPercent,
+    double NetworkBytesPerSecond);

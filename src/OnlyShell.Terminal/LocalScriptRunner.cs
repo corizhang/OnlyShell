@@ -13,6 +13,7 @@ public sealed class LocalScriptRunner : ILocalScriptRunner
         ScriptRuntimeKind runtime,
         string content,
         string workingDirectory,
+        ScriptExecutionInputs inputs,
         CancellationToken cancellationToken = default,
         Action<string, bool>? outputReceived = null)
     {
@@ -40,6 +41,24 @@ public sealed class LocalScriptRunner : ILocalScriptRunner
         }
         var startInfo = CreateStartInfo(runtime, temporaryScriptPath);
         startInfo.WorkingDirectory = workingDirectory;
+        foreach (var (name, value) in inputs.EnvironmentVariables)
+            startInfo.Environment[name] = value;
+        if (runtime == ScriptRuntimeKind.Cmd)
+        {
+            startInfo.Environment["ONLYSHELL_ARG_COUNT"] = inputs.Arguments.Count.ToString(CultureInfo.InvariantCulture);
+            for (var index = 0; index < inputs.Arguments.Count; index++)
+                startInfo.Environment[$"ONLYSHELL_ARG_{index + 1}"] = inputs.Arguments[index];
+        }
+        else if (runtime == ScriptRuntimeKind.PowerShell)
+        {
+            foreach (var argument in inputs.Arguments)
+                startInfo.ArgumentList.Add(argument);
+        }
+        else if (runtime == ScriptRuntimeKind.Python3)
+        {
+            foreach (var argument in inputs.Arguments)
+                startInfo.ArgumentList.Add(argument);
+        }
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
         startInfo.RedirectStandardInput = true;
@@ -79,7 +98,7 @@ public sealed class LocalScriptRunner : ILocalScriptRunner
             if (runtime != ScriptRuntimeKind.PowerShell)
             {
                 var input = runtime == ScriptRuntimeKind.Cmd
-                    ? $"{content}\r\nexit\r\n"
+                    ? $"set ONLYSHELL_ARG_COUNT={inputs.Arguments.Count}\r\n{content}\r\nexit\r\n"
                     : content;
                 await process.StandardInput.WriteAsync(input.AsMemory(), cancellationToken);
                 await process.StandardInput.FlushAsync(cancellationToken);

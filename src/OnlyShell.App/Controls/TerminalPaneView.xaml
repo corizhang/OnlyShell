@@ -4,7 +4,7 @@
              xmlns:vt="clr-namespace:VirtualTerminal;assembly=VirtualTerminal.WPF"
              MinWidth="0" MinHeight="0">
     <Grid Background="#050505">
-        <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <DockPanel Background="#1B1A20" LastChildFill="False">
             <TextBlock Text="{Binding EndpointLabel}" Foreground="{DynamicResource SyntaxCyanBrush}" FontFamily="Cascadia Code" FontSize="9" VerticalAlignment="Center" Margin="8,0,0,0" />
             <TextBlock Text="  ·  " Foreground="{DynamicResource MutedBrush}" FontFamily="Cascadia Code" FontSize="9" VerticalAlignment="Center" />
@@ -12,12 +12,42 @@
             <TextBlock Text="  ·  " Foreground="{DynamicResource MutedBrush}" FontFamily="Cascadia Code" FontSize="9" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SyntaxGreenBrush}" FontFamily="Cascadia Code" FontSize="9" VerticalAlignment="Center" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="[ QUICK CMD ]" Click="QuickCommands_Click" Background="Transparent" Foreground="{DynamicResource SyntaxCyanBrush}" BorderThickness="0" FontFamily="Cascadia Code" FontSize="9" Padding="8,2" ToolTip="管理并插入快捷命令；不会自动执行" />
+                <Button Content="[ FIND / CTRL+F ]" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource SyntaxCyanBrush}" BorderThickness="0" FontFamily="Cascadia Code" FontSize="9" Padding="8,2" ToolTip="搜索当前终端屏幕和滚屏缓冲区；按 Enter 查找下一个" />
                 <Button Content="[ REOPEN ]" Command="{Binding DataContext.ReconnectTerminalCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" IsEnabled="{Binding CanReconnect}" Background="Transparent" Foreground="{DynamicResource AccentBrush}" BorderThickness="0" FontFamily="Cascadia Code" FontSize="9" Padding="8,2" />
                 <Button Content="[ CLOSE ]" Command="{Binding DataContext.CloseTerminalCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Background="Transparent" Foreground="#E68174" BorderThickness="0" FontFamily="Cascadia Code" FontSize="9" Padding="8,2" />
             </StackPanel>
         </DockPanel>
-        <vt:TerminalControl Grid.Row="1" Session="{Binding Session}" AllowDirectInput="True" ScrollDownVisible="True" Background="#050505" Foreground="#DEDDE1" FontFamily="NSimSun" FontSize="14" />
-        <Border Grid.Row="1" Visibility="{Binding IsSessionMissing, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#050505">
+        <DockPanel x:Name="SearchBar" Grid.Row="1" Background="#222128" Margin="0,1,0,1" Visibility="Collapsed" LastChildFill="False">
+            <TextBlock Text="FIND" Foreground="{DynamicResource AccentBrush}" FontFamily="Cascadia Code" FontSize="9" VerticalAlignment="Center" Margin="8,0,6,0" />
+            <TextBox x:Name="SearchBox" Width="220" Height="22" Padding="5,2" VerticalContentAlignment="Center" FontSize="10" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown" />
+            <TextBlock x:Name="SearchResultCount" Text="0 / 0" Foreground="{DynamicResource MutedBrush}" FontFamily="Cascadia Code" FontSize="8" VerticalAlignment="Center" Margin="8,0" />
+            <Button Content="↑" Click="PreviousMatch_Click" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Padding="7,1" Margin="0,0,3,0" ToolTip="上一个匹配项" />
+            <Button Content="↓" Click="NextMatch_Click" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Padding="7,1" Margin="0,0,3,0" ToolTip="下一个匹配项" />
+            <Button Content="×" Click="CloseSearch_Click" Background="Transparent" Foreground="{DynamicResource MutedBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Padding="6,1" ToolTip="关闭搜索 (Esc)" />
+        </DockPanel>
+        <vt:TerminalControl x:Name="Terminal" Grid.Row="2" Session="{Binding Session}" AllowDirectInput="True" ConfirmMultiLinePaste="True" ScrollDownVisible="True" Background="#050505" Foreground="#DEDDE1" FontFamily="NSimSun" FontSize="14">
+            <vt:TerminalControl.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="复制选中内容    Ctrl+Shift+C" Command="{x:Static vt:TerminalControl.CopyCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="粘贴    Ctrl+Shift+V" Command="{x:Static vt:TerminalControl.PasteCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Separator />
+                    <MenuItem Header="查找    Ctrl+F" Click="TerminalContextFind_Click" />
+                    <MenuItem Header="全选" Command="{x:Static vt:TerminalControl.SelectAllCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="清屏" Command="{x:Static vt:TerminalControl.ClearCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                </ContextMenu>
+            </vt:TerminalControl.ContextMenu>
+        </vt:TerminalControl>
+        <Popup x:Name="SelectionToolbarPopup" Grid.Row="2" PlacementTarget="{Binding ElementName=Terminal}" Placement="RelativePoint" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="#25232B" BorderBrush="#55515E" BorderThickness="1" CornerRadius="3" Padding="3">
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="复制" Click="CopySelection_Click" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0" Padding="8,4" FontSize="10" ToolTip="复制选中内容 (Ctrl+Shift+C)" />
+                    <Button Content="粘贴" Click="PasteFromToolbar_Click" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0" Padding="8,4" FontSize="10" ToolTip="粘贴剪贴板内容 (Ctrl+Shift+V；Ctrl+V 也可用)" />
+                    <Button Content="查找" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0" Padding="8,4" FontSize="10" ToolTip="查找终端内容 (Ctrl+F)" />
+                </StackPanel>
+            </Border>
+        </Popup>
+        <Border Grid.Row="2" Visibility="{Binding IsSessionMissing, Converter={StaticResource BooleanToVisibilityConverter}}" Background="#050505">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="// SESSION_RESTORED / NOT_CONNECTED" Foreground="{DynamicResource AccentBrush}" FontFamily="Cascadia Code" FontSize="10" HorizontalAlignment="Center"/><TextBlock Text="点击上方 REOPEN 重新建立终端会话。" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,8,0,0"/></StackPanel>
         </Border>
     </Grid>

@@ -58,6 +58,12 @@ public partial class TerminalControl : Control, IDisposable
     // Scrollback navigation (mouse wheel). 0 = live at the bottom; >0 = rows scrolled back into history.
     private int _scrollOffset;
     private const int ScrollWheelLines = 3;
+    private int? _searchMatchLine;
+    private int _searchMatchStart;
+    private int _searchMatchLength;
+
+    /// <summary>Raised when local text selection changes or a drag selection completes.</summary>
+    public event EventHandler<TerminalSelectionStateEventArgs>? SelectionStateChanged;
 
     // Sanity limits for the terminal grid. Sizes below this (especially 1 column)
     // make ConPTY and most shells behave badly (reset/crash).
@@ -124,6 +130,9 @@ public partial class TerminalControl : Control, IDisposable
         get => (bool)GetValue(AllowDirectInputProperty);
         set => SetValue(AllowDirectInputProperty, value);
     }
+
+    /// <summary>Gets or sets whether pasting clipboard content containing line breaks requires confirmation.</summary>
+    public bool ConfirmMultiLinePaste { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether the floating "scroll to bottom" button is enabled.
@@ -219,7 +228,7 @@ public partial class TerminalControl : Control, IDisposable
         Unloaded += OnControlUnloaded;
 
         CommandBindings.Add(new CommandBinding(CopyCommand,
-            (s, e) => { _ = CopySelectionToClipboardAsync(); e.Handled = true; },
+            (s, e) => { CopySelectionToClipboard(); e.Handled = true; },
             (s, e) => { e.CanExecute = _selection is not null; e.Handled = true; }));
         CommandBindings.Add(new CommandBinding(PasteCommand,
             (s, e) => { _ = PasteFromClipboardAsync(); e.Handled = true; },
@@ -328,7 +337,19 @@ public partial class TerminalControl : Control, IDisposable
         _selection = new TerminalSelection(0, 0, _decoder.Buffer.Columns - 1, _decoder.Buffer.Rows - 1);
         InvalidateCommandState();
         InvalidateVisual();
+        RaiseSelectionStateChanged(completed: true, new Point(ActualWidth / 2, ActualHeight / 2));
     }
+
+    /// <summary>Copies the current terminal selection to the system clipboard.</summary>
+    public void CopySelectionToClipboard()
+    {
+        string? text = BuildSelectedText();
+        if (!string.IsNullOrEmpty(text))
+            Clipboard.SetText(text);
+    }
+
+    /// <summary>Pastes clipboard text into the terminal session.</summary>
+    public Task PasteFromClipboardAsync() => PasteClipboardTextAsync();
 
     /// <summary>Clears the terminal screen and moves the cursor to the home position.</summary>
     public void Clear()
@@ -489,9 +510,123 @@ public partial class TerminalControl : Control, IDisposable
             drawingContext.Pop();
         }
 
+        DrawSearchMatch(drawingContext, buf, scrollback, cell);
+
         RenderCursorVisual(drawingContext);
         for (int i = 0; i < buf.Rows; i++)
             buf.MarkRowClean(i);
+    }
+
+    private void DrawSearchMatch(DrawingContext drawingContext, TerminalScreenBuffer buffer, IReadOnlyList<TerminalRow>? scrollback, Size cell)
+    {
+        if (_searchMatchLine is not int line || _searchMatchLength <= 0)
+            return;
+
+        int scrollbackCount = buffer.IsAlternate ? 0 : buffer.ScrollbackCount;
+        int top = buffer.IsAlternate ? 0 : scrollbackCount - _scrollOffset;
+        int viewportRow = line - top;
+        if (viewportRow < 0 || viewportRow >= buffer.Rows)
+            return;
+
+        double x = Math.Max(0, _searchMatchStart * cell.Width);
+        double y = viewportRow * cell.Height;
+        double width = Math.Min(RenderSize.Width - x, Math.Max(cell.Width, _searchMatchLength * cell.Width));
+        if (width <= 0)
+            return;
+
+        var pen = new Pen(new SolidColorBrush(WindowsColor.FromArgb(230, 235, 170, 48)), 1.5);
+        drawingContext.DrawRectangle(null, pen, new Rect(x + 0.5, y + 0.5, Math.Max(1, width - 1), Math.Max(1, cell.Height - 1)));
+    }
+
+    /// <summary>Returns the number of case-insensitive matches currently held in scrollback and the screen.</summary>
+    public int FindTextMatchCount(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || Session is null)
+            return 0;
+
+        TerminalScreenBuffer buffer = Session.Buffer;
+        string text;
+        lock (buffer.SyncRoot)
+            text = buffer.GetAllText();
+
+        return CountMatches(text, query);
+    }
+
+    /// <summary>Scrolls to and outlines the zero-based case-insensitive match occurrence.</summary>
+    public bool NavigateToTextMatch(string query, int occurrence)
+    {
+        if (string.IsNullOrWhiteSpace(query) || Session is null)
+            return false;
+
+        TerminalScreenBuffer buffer = Session.Buffer;
+        string text;
+        bool alternate;
+        int scrollbackCount;
+        int rows;
+        lock (buffer.SyncRoot)
+        {
+            text = buffer.GetAllText();
+            alternate = buffer.IsAlternate;
+            scrollbackCount = alternate ? 0 : buffer.ScrollbackCount;
+            rows = buffer.Rows;
+        }
+
+        var matches = new List<(int Line, int Start)>();
+        string[] lines = text.Split('\n');
+        for (int line = 0; line < lines.Length; line++)
+        {
+            int start = 0;
+            while (start <= lines[line].Length - query.Length)
+            {
+                int match = lines[line].IndexOf(query, start, StringComparison.OrdinalIgnoreCase);
+                if (match < 0)
+                    break;
+                matches.Add((line, match));
+                start = match + Math.Max(1, query.Length);
+            }
+        }
+
+        if (matches.Count == 0)
+            return false;
+
+        var selected = matches[Math.Clamp(occurrence, 0, matches.Count - 1)];
+        _searchMatchLine = selected.Line;
+        _searchMatchStart = selected.Start;
+        _searchMatchLength = query.Length;
+        if (!alternate)
+        {
+            int targetTop = Math.Max(0, selected.Line - rows / 2);
+            _scrollOffset = Math.Clamp(scrollbackCount - targetTop, 0, scrollbackCount);
+            UpdateScrollDownVisibility();
+        }
+        InvalidateVisual();
+        return true;
+    }
+
+    /// <summary>Clears the active search-result outline.</summary>
+    public void ClearTextSearch()
+    {
+        _searchMatchLine = null;
+        _searchMatchLength = 0;
+        InvalidateVisual();
+    }
+
+    private static int CountMatches(string text, string query)
+    {
+        int count = 0;
+        foreach (string line in text.Split('\n'))
+        {
+            int start = 0;
+            while (start <= line.Length - query.Length)
+            {
+                int match = line.IndexOf(query, start, StringComparison.OrdinalIgnoreCase);
+                if (match < 0)
+                    break;
+                count++;
+                start = match + Math.Max(1, query.Length);
+            }
+        }
+        return count;
     }
 
     private Span<TerminalCellInfo> GetRowCells(TerminalScreenBuffer buf, IReadOnlyList<TerminalRow>? scrollback, int viewportRow)
@@ -672,12 +807,12 @@ public partial class TerminalControl : Control, IDisposable
         // Ctrl+Shift+C always copies the current selection.
         if (key == Key.C && (mods & ModifierKeys.Control) != 0 && (mods & ModifierKeys.Shift) != 0)
         {
-            _ = CopySelectionToClipboardAsync();
+            CopySelectionToClipboard();
             e.Handled = true;
             return;
         }
 
-        // Ctrl+V pastes clipboard content into the session.
+        // Ctrl+V and Ctrl+Shift+V paste clipboard content into the session.
         if (key == Key.V && (mods & ModifierKeys.Control) != 0)
         {
             _ = PasteFromClipboardAsync();
@@ -691,6 +826,7 @@ public partial class TerminalControl : Control, IDisposable
             _selection = null;
             InvalidateCommandState();
             InvalidateVisual();
+            RaiseSelectionStateChanged(completed: false, default);
         }
 
         if (_scrollOffset > 0)
@@ -741,6 +877,7 @@ public partial class TerminalControl : Control, IDisposable
             _selection = null;
             InvalidateCommandState();
             InvalidateVisual();
+            RaiseSelectionStateChanged(completed: false, default);
         }
 
         if (_scrollOffset > 0)
@@ -870,6 +1007,7 @@ public partial class TerminalControl : Control, IDisposable
             CaptureMouse();
             InvalidateCommandState();
             InvalidateVisual();
+            RaiseSelectionStateChanged(completed: false, e.GetPosition(this));
         }
         else if (e.ChangedButton == MouseButton.Right)
         {
@@ -879,18 +1017,6 @@ public partial class TerminalControl : Control, IDisposable
 
             e.Handled = true;
 
-            // Terminal-style right click: copy if something is selected, otherwise paste.
-            if (_selection is not null)
-            {
-                _ = CopySelectionToClipboardAsync();
-                _selection = null;
-                InvalidateCommandState();
-                InvalidateVisual();
-            }
-            else
-            {
-                _ = PasteFromClipboardAsync();
-            }
         }
     }
 
@@ -955,8 +1081,8 @@ public partial class TerminalControl : Control, IDisposable
 
         if (_selection is { } sel && (sel.StartY != sel.EndY || sel.StartX != sel.EndX))
         {
-            _ = CopySelectionToClipboardAsync();
             InvalidateCommandState();
+            RaiseSelectionStateChanged(completed: true, e.GetPosition(this));
         }
         else
         {
@@ -964,6 +1090,7 @@ public partial class TerminalControl : Control, IDisposable
             _selection = null;
             InvalidateCommandState();
             InvalidateVisual();
+            RaiseSelectionStateChanged(completed: false, e.GetPosition(this));
         }
     }
 
@@ -1096,23 +1223,19 @@ public partial class TerminalControl : Control, IDisposable
             ? builder.ToString().TrimEnd('\n') : null;
     }
 
-    private async Task CopySelectionToClipboardAsync()
-    {
-        string? text = BuildSelectedText();
-        if (string.IsNullOrEmpty(text))
-            return;
-
-        Clipboard.SetText(text);
-        await Task.CompletedTask;
-    }
-
-    private async Task PasteFromClipboardAsync()
+    private async Task PasteClipboardTextAsync()
     {
         if (Session is null)
             return;
 
         string? text = Clipboard.GetText();
         if (string.IsNullOrEmpty(text))
+            return;
+
+        if (ConfirmMultiLinePaste && (text.Contains('\n') || text.Contains('\r'))
+            && MessageBox.Show(Window.GetWindow(this),
+                "剪贴板包含多行内容。粘贴可能会向终端提交多条命令，是否继续？",
+                "OnlyShell / 确认多行粘贴", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
         // Normalize line endings to CR so the terminal interprets them as Enter keys, and
@@ -1122,6 +1245,9 @@ public partial class TerminalControl : Control, IDisposable
         Session.Append(KeyboardEncoder.WrapBracketedPaste(text, bracketed));
         await Task.CompletedTask;
     }
+
+    private void RaiseSelectionStateChanged(bool completed, Point anchor)
+        => SelectionStateChanged?.Invoke(this, new TerminalSelectionStateEventArgs(_selection is not null, completed, anchor));
 
     // ---- Session events ----
     private void OnSessionBufferUpdated(object? sender, EventArgs e)
@@ -1302,4 +1428,17 @@ public partial class TerminalControl : Control, IDisposable
     public static readonly DependencyProperty AutoScrollingProperty = DependencyProperty.Register(
         nameof(AutoScrolling), typeof(bool), typeof(TerminalControl),
         new PropertyMetadata(defaultValue: true));
+}
+
+/// <summary>Selection state and pointer location reported by <see cref="TerminalControl"/>.</summary>
+public sealed class TerminalSelectionStateEventArgs(bool hasSelection, bool completed, Point anchor) : EventArgs
+{
+    /// <summary>Gets whether the terminal currently has a non-empty selection.</summary>
+    public bool HasSelection { get; } = hasSelection;
+
+    /// <summary>Gets whether a mouse drag selection has just completed.</summary>
+    public bool Completed { get; } = completed;
+
+    /// <summary>Gets the selection end pointer location relative to the terminal control.</summary>
+    public Point Anchor { get; } = anchor;
 }

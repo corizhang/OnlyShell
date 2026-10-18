@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
@@ -23,10 +24,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public sealed record SplitHostConnectionRequest(HostProfile Host, TerminalTabViewModel Placeholder);
     public sealed record SplitTabMoveRequest(TerminalTabViewModel Tab, bool ToLeftPane);
 
-    private sealed record LocalTreeEntry(string FullPath, string RelativePath, bool IsDirectory, long Size);
+    private sealed record LocalTreeEntry(string FullPath, string RelativePath, bool IsDirectory, long Size, DateTime LastWriteTimeUtc);
+
+    private sealed class DirectoryTransferManifest
+    {
+        private readonly Dictionary<string, string> _completed = new(StringComparer.Ordinal);
+        public bool IsCompleted(string relativePath, string fingerprint) => _completed.TryGetValue(relativePath, out var completed) && completed == fingerprint;
+        public void MarkCompleted(string relativePath, string fingerprint) => _completed[relativePath] = fingerprint;
+    }
 
     private sealed record QueuedSftpTransfer(
         SftpTransferItemViewModel Item,
+        Guid HostId,
         Func<ISftpSession, IProgress<double>, CancellationToken, Task> Execute);
 
     private readonly IHostRepository _hostRepository;
@@ -41,16 +50,21 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private readonly ILocalTerminalConnector _localTerminalConnector;
     private readonly ITerminalWorkspaceStateStore _terminalWorkspaceStateStore;
     private readonly IScriptCenterStore _scriptCenterStore;
+    private readonly IScriptExecutionInputsStore _scriptExecutionInputsStore;
     private readonly IRemoteScriptRunner _remoteScriptRunner;
     private readonly ILocalScriptRunner _localScriptRunner;
     private readonly IScriptCenterInteractionService _scriptCenterInteraction;
     private bool _scriptCenterLoaded;
+    private Task _selectedScriptDefaultsLoading = Task.CompletedTask;
     private bool _localExecutionConfirmed;
     private CancellationTokenSource? _scriptRunCancellation;
+    private readonly SemaphoreSlim _batchCredentialPromptLock = new(1, 1);
+    private readonly SemaphoreSlim _batchCredentialPersistenceLock = new(1, 1);
     private bool _restoringTerminalWorkspace;
     private ISftpSession? _sftpSession;
     private HostProfile? _sftpHost;
     private readonly Queue<QueuedSftpTransfer> _sftpTransferQueue = new();
+    private readonly Dictionary<SftpTransferItemViewModel, QueuedSftpTransfer> _sftpRetryActions = [];
     private CancellationTokenSource? _activeTransferCancellation;
     private Task? _transferQueueTask;
     private readonly DispatcherTimer _sftpConnectionMonitor;
@@ -70,10 +84,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public IReadOnlyList<string> LocalDrives { get; } = DriveInfo.GetDrives().Where(drive => drive.IsReady).Select(drive => drive.Name).ToArray();
     public ObservableCollection<SftpTransferItemViewModel> SftpTransfers { get; } = [];
     public ObservableCollection<ScriptDefinition> Scripts { get; } = [];
+    public ObservableCollection<ScriptTemplateFieldViewModel> ScriptTemplateFields { get; } = [];
     public ObservableCollection<ScriptCatalogNode> ScriptCatalogNodes { get; } = [];
     public ObservableCollection<ScriptCatalogNode> VisibleScriptCatalogNodes { get; } = [];
     public ObservableCollection<ScriptRunLog> RecentScriptRuns { get; } = [];
     public IReadOnlyList<string> ScriptExecutionTargetOptions { get; } = ["远程主机", "本机"];
+    public IReadOnlyList<string> ScriptInputTypeOptions { get; } = ["文本", "数字", "布尔", "路径", "选项", "密码"];
     public IReadOnlyList<string> AvailableScriptRuntimeOptions => SelectedScriptExecutionTarget == "本机"
         ? ["PowerShell", "CMD", "Python 3"]
         : ["Bash", "Python 3"];
@@ -192,6 +208,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private string scriptFolderPath = string.Empty;
 
     [ObservableProperty]
+    private string scriptInputTemplate = string.Empty;
+
+    [ObservableProperty]
     private string scriptSearchText = string.Empty;
 
     [ObservableProperty]
@@ -210,10 +229,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private string scriptCenterStatus = "READY / SELECT A SCRIPT AND TARGET";
 
     public bool IsHostSection => string.Equals(ActiveSection, "主机", StringComparison.Ordinal);
-    public bool IsFeaturePlaceholder => !IsHostSection && !IsTerminalSessionVisible && !IsTerminalEmpty && !IsSftpWorkspace && !IsSyncWorkspace && !IsScriptCenterWorkspace;
+    public bool IsFeaturePlaceholder => !IsHostSection && !IsTerminalSessionVisible && !IsTerminalEmpty && !IsSftpWorkspace && !IsSyncWorkspace && !IsScriptCenterWorkspace && !IsSettingsWorkspace;
     public bool IsSftpWorkspace => string.Equals(ActiveSection, "SFTP", StringComparison.Ordinal);
     public bool IsSyncWorkspace => string.Equals(ActiveSection, "同步", StringComparison.Ordinal);
     public bool IsScriptCenterWorkspace => string.Equals(ActiveSection, "脚本", StringComparison.Ordinal);
+    public bool IsSettingsWorkspace => string.Equals(ActiveSection, "设置", StringComparison.Ordinal);
     public string SelectedScriptRunText => SelectedScriptRun is null
         ? "// NO RUN SELECTED"
         : $"[{SelectedScriptRun.StartedAt.LocalDateTime:yyyy-MM-dd HH:mm:ss}] {SelectedScriptRun.TargetType.ToUpperInvariant()} / {SelectedScriptRun.HostName} · {(SelectedScriptRun.ExitCode?.ToString() ?? (IsScriptRunning ? "RUNNING" : "ERROR"))}\n{SelectedScriptRun.Output}{(string.IsNullOrWhiteSpace(SelectedScriptRun.Error) ? string.Empty : $"\n--- STDERR / ERROR ---\n{SelectedScriptRun.Error}")}";
@@ -266,6 +286,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         ILocalTerminalConnector localTerminalConnector,
         ITerminalWorkspaceStateStore terminalWorkspaceStateStore,
         IScriptCenterStore scriptCenterStore,
+        IScriptExecutionInputsStore scriptExecutionInputsStore,
         IRemoteScriptRunner remoteScriptRunner,
         ILocalScriptRunner localScriptRunner,
         IScriptCenterInteractionService scriptCenterInteraction)
@@ -282,6 +303,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         _localTerminalConnector = localTerminalConnector;
         _terminalWorkspaceStateStore = terminalWorkspaceStateStore;
         _scriptCenterStore = scriptCenterStore;
+        _scriptExecutionInputsStore = scriptExecutionInputsStore;
         _remoteScriptRunner = remoteScriptRunner;
         _localScriptRunner = localScriptRunner;
         _scriptCenterInteraction = scriptCenterInteraction;
@@ -298,6 +320,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 SftpStatus = "CONNECTION LOST  ·  RECONNECT REQUIRED";
                 OnPropertyChanged(nameof(IsSftpConnected));
                 OnPropertyChanged(nameof(IsSftpDisconnected));
+                RetrySftpTransferCommand.NotifyCanExecuteChanged();
             }
         };
         _sftpConnectionMonitor.Start();
@@ -456,6 +479,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSftpWorkspace));
         OnPropertyChanged(nameof(IsSyncWorkspace));
         OnPropertyChanged(nameof(IsScriptCenterWorkspace));
+        OnPropertyChanged(nameof(IsSettingsWorkspace));
         OnPropertyChanged(nameof(IsSftpConnected));
         OnPropertyChanged(nameof(IsSftpDisconnected));
         OnPropertyChanged(nameof(IsFeaturePlaceholder));
@@ -479,6 +503,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             ScriptDescription = string.Empty;
             ScriptContent = string.Empty;
             ScriptFolderPath = string.Empty;
+            ScriptInputTemplate = string.Empty;
+            ScriptTemplateFields.Clear();
             SelectedScriptRuntime = "Bash";
             SelectedScriptCatalogNode = null;
             return;
@@ -487,6 +513,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         ScriptDescription = value.Description;
         ScriptContent = value.Content;
         ScriptFolderPath = value.FolderPath;
+        ScriptInputTemplate = value.InputTemplate ?? string.Empty;
+        ScriptTemplateFields.Clear();
+        var fields = value.InputFields is { Count: > 0 } ? value.InputFields : ParseLegacyInputTemplate(value.InputTemplate);
+        foreach (var field in fields)
+            ScriptTemplateFields.Add(new ScriptTemplateFieldViewModel(field.Kind, field.Name, InputTypeName(field.ValueType), field.IsRequired,
+                field.IsSensitive || field.ValueType == ScriptInputValueType.Secret, field.Options, group: field.Group));
+        _selectedScriptDefaultsLoading = LoadScriptInputDefaultsAsync(value.Id);
         SelectedScriptExecutionTarget = value.ExecutionTarget == "Local" ? "本机" : "远程主机";
         SelectedScriptRuntime = RuntimeName(value.Runtime);
         SelectedScriptCatalogNode = VisibleScriptCatalogNodes.FirstOrDefault(node => node.Script?.Id == value.Id);
@@ -1088,6 +1121,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             OnPropertyChanged(nameof(SftpHost));
             OnPropertyChanged(nameof(IsSftpConnected));
             OnPropertyChanged(nameof(IsSftpDisconnected));
+            RetrySftpTransferCommand.NotifyCanExecuteChanged();
             RemotePath = _sftpSession.HomeDirectory;
             await RefreshRemoteDirectoryAsync();
             await RefreshLocalDirectoryAsync();
@@ -1159,6 +1193,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             OnPropertyChanged(nameof(SftpHost));
             OnPropertyChanged(nameof(IsSftpConnected));
             OnPropertyChanged(nameof(IsSftpDisconnected));
+            RetrySftpTransferCommand.NotifyCanExecuteChanged();
             RemotePath = session.HomeDirectory;
             var entries = await session.ListDirectoryAsync(RemotePath);
             SetSelectedRemoteFiles([]);
@@ -1272,8 +1307,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                     }
                     if (!approved)
                         continue;
+                    var manifest = new DirectoryTransferManifest();
+                    var approvedPaths = tree.Select(item => item.RelativePath).ToHashSet(StringComparer.Ordinal);
                     EnqueueSftpTransfer(entry.Name, "UPLOAD TREE", remotePath,
-                        (session, progress, token) => UploadDirectoryAsync(session, remotePath, tree, progress, token));
+                        async (session, progress, token) =>
+                        {
+                            var currentTree = (await GetLocalTreeAsync(entry.FullPath)).Where(item => approvedPaths.Contains(item.RelativePath)).ToArray();
+                            if (currentTree.Count(item => !item.IsDirectory) != tree.Count(item => !item.IsDirectory))
+                                throw new IOException("所选目录中的文件在传输期间被删除或移动；请重新选择目录后重试。");
+                            await UploadDirectoryAsync(session, remotePath, currentTree, progress, manifest, token);
+                        });
                 }
                 else
                 {
@@ -1349,8 +1392,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                     }
                     if (!approved)
                         continue;
+                    var manifest = new DirectoryTransferManifest();
+                    var approvedPaths = tree.Select(item => item.FullPath).ToHashSet(StringComparer.Ordinal);
                     EnqueueSftpTransfer(entry.Name, "DOWNLOAD TREE", entry.FullPath,
-                        (session, progress, token) => DownloadDirectoryAsync(session, entry, localPath, tree, progress, token));
+                        async (session, progress, token) =>
+                        {
+                            var currentTree = (await GetRemoteTreeAsync(entry)).Where(item => approvedPaths.Contains(item.FullPath)).ToArray();
+                            if (currentTree.Count(item => !item.IsDirectory) != tree.Count(item => !item.IsDirectory))
+                                throw new IOException("远程目录中的文件在传输期间被删除或移动；请重新选择目录后重试。");
+                            await DownloadDirectoryAsync(session, entry, localPath, currentTree, progress, manifest, token);
+                        });
                 }
                 else
                 {
@@ -1526,7 +1577,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     private static Task<IReadOnlyList<LocalTreeEntry>> GetLocalTreeAsync(string root) => Task.Run<IReadOnlyList<LocalTreeEntry>>(() =>
     {
-        var result = new List<LocalTreeEntry> { new(root, string.Empty, true, 0) };
+        var result = new List<LocalTreeEntry> { new(root, string.Empty, true, 0, Directory.GetLastWriteTimeUtc(root)) };
         var pending = new Stack<string>();
         pending.Push(root);
         while (pending.TryPop(out var current))
@@ -1538,7 +1589,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                     continue;
                 var isDirectory = (attributes & FileAttributes.Directory) != 0;
                 var relative = Path.GetRelativePath(root, info.FullName);
-                result.Add(new LocalTreeEntry(info.FullName, relative, isDirectory, info is FileInfo file ? file.Length : 0));
+                result.Add(new LocalTreeEntry(info.FullName, relative, isDirectory, info is FileInfo file ? file.Length : 0, info.LastWriteTimeUtc));
                 if (isDirectory)
                     pending.Push(info.FullName);
             }
@@ -1611,6 +1662,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         string remoteRoot,
         IReadOnlyList<LocalTreeEntry> tree,
         IProgress<double> progress,
+        DirectoryTransferManifest manifest,
         CancellationToken cancellationToken)
     {
         await session.EnsureDirectoryAsync(remoteRoot, cancellationToken);
@@ -1619,14 +1671,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
         var files = tree.Where(entry => !entry.IsDirectory).ToArray();
         var totalBytes = files.Sum(file => file.Size);
-        long completedBytes = 0;
+        long completedBytes = files.Where(file => manifest.IsCompleted(file.RelativePath, $"{file.Size}:{file.LastWriteTimeUtc.Ticks}")).Sum(file => file.Size);
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var fingerprint = $"{file.Size}:{file.LastWriteTimeUtc.Ticks}";
+            if (manifest.IsCompleted(file.RelativePath, fingerprint))
+                continue;
             var sentBeforeFile = completedBytes;
             var target = JoinRemotePath(remoteRoot, file.RelativePath.Replace('\\', '/'));
             var itemProgress = new Progress<double>(value => progress.Report(totalBytes == 0 ? 100 : Math.Clamp((sentBeforeFile + file.Size * value / 100d) * 100d / totalBytes, 0, 100)));
             await session.UploadAsync(file.FullPath, target, itemProgress, cancellationToken);
+            manifest.MarkCompleted(file.RelativePath, fingerprint);
             completedBytes += file.Size;
         }
         progress.Report(100);
@@ -1638,6 +1694,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         string localRoot,
         IReadOnlyList<RemoteFileEntry> tree,
         IProgress<double> progress,
+        DirectoryTransferManifest manifest,
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(localRoot);
@@ -1649,15 +1706,19 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
         var files = tree.Where(entry => !entry.IsDirectory).ToArray();
         var totalBytes = files.Sum(file => file.Size);
-        long completedBytes = 0;
+        long completedBytes = files.Where(file => manifest.IsCompleted(GetRemoteRelativePath(remoteRoot.FullPath, file.FullPath), $"{file.Size}:{file.LastWriteTime.Ticks}")).Sum(file => file.Size);
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = GetRemoteRelativePath(remoteRoot.FullPath, file.FullPath);
+            var fingerprint = $"{file.Size}:{file.LastWriteTime.Ticks}";
+            if (manifest.IsCompleted(relative, fingerprint))
+                continue;
             var target = GetSafeLocalTarget(localRoot, relative);
             var sentBeforeFile = completedBytes;
             var itemProgress = new Progress<double>(value => progress.Report(totalBytes == 0 ? 100 : Math.Clamp((sentBeforeFile + file.Size * value / 100d) * 100d / totalBytes, 0, 100)));
             await session.DownloadAsync(file.FullPath, target, itemProgress, cancellationToken);
+            manifest.MarkCompleted(relative, fingerprint);
             completedBytes += file.Size;
         }
         progress.Report(100);
@@ -1687,6 +1748,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         SftpStatus = "DISCONNECTED";
         OnPropertyChanged(nameof(IsSftpConnected));
         OnPropertyChanged(nameof(IsSftpDisconnected));
+        RetrySftpTransferCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
@@ -1700,6 +1762,27 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         else
             item.Status = "CANCELLED";
         OnPropertyChanged(nameof(PendingTransferCount));
+    }
+
+    private bool CanRetrySftpTransfer(SftpTransferItemViewModel? item) =>
+        item?.Status == "FAILED"
+        && _sftpSession?.IsConnected == true
+        && _sftpHost is not null
+        && _sftpRetryActions.TryGetValue(item, out var transfer)
+        && transfer.HostId == _sftpHost.Id;
+
+    [RelayCommand(CanExecute = nameof(CanRetrySftpTransfer))]
+    private void RetrySftpTransfer(SftpTransferItemViewModel? item)
+    {
+        if (item is null || !CanRetrySftpTransfer(item) || !_sftpRetryActions.TryGetValue(item, out var transfer))
+            return;
+
+        item.Progress = 0;
+        item.ErrorMessage = null;
+        item.Status = "QUEUED";
+        _sftpTransferQueue.Enqueue(transfer);
+        OnPropertyChanged(nameof(PendingTransferCount));
+        StartSftpTransferQueue();
     }
 
     private void CancelActiveTransferSafely()
@@ -1729,7 +1812,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     {
         var item = new SftpTransferItemViewModel(name, direction, remotePath);
         SftpTransfers.Insert(0, item);
-        _sftpTransferQueue.Enqueue(new QueuedSftpTransfer(item, execute));
+        var queued = new QueuedSftpTransfer(item, _sftpHost?.Id ?? Guid.Empty, execute);
+        _sftpRetryActions[item] = queued;
+        _sftpTransferQueue.Enqueue(queued);
+        RetrySftpTransferCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(PendingTransferCount));
     }
 
@@ -1790,6 +1876,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                     _activeTransferCancellation = null;
                     OnPropertyChanged(nameof(IsSftpTransferRunning));
                     OnPropertyChanged(nameof(PendingTransferCount));
+                    RetrySftpTransferCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -1934,8 +2021,22 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void AddScriptArgumentTemplateField() => ScriptTemplateFields.Add(new ScriptTemplateFieldViewModel("ARG"));
+
+    [RelayCommand]
+    private void AddScriptEnvironmentTemplateField() => ScriptTemplateFields.Add(new ScriptTemplateFieldViewModel("ENV"));
+
+    [RelayCommand]
+    private void RemoveScriptTemplateField(ScriptTemplateFieldViewModel? field)
+    {
+        if (field is not null)
+            ScriptTemplateFields.Remove(field);
+    }
+
+    [RelayCommand]
     private async Task SaveScriptAsync()
     {
+        await _selectedScriptDefaultsLoading;
         if (string.IsNullOrWhiteSpace(ScriptName))
         {
             ScriptCenterStatus = "SAVE FAILED / SCRIPT NAME REQUIRED";
@@ -1947,6 +2048,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             return;
         }
 
+        var inputFields = SerializeScriptInputFields(ScriptTemplateFields);
+        var inputTemplateError = ValidateScriptInputFields(inputFields);
+        if (inputTemplateError is not null)
+        {
+            ScriptCenterStatus = "SAVE FAILED / INPUT TEMPLATE";
+            await _syncInteraction.ShowErrorAsync("参数模板无效", inputTemplateError);
+            return;
+        }
+
         var script = new ScriptDefinition(
             SelectedScript?.Id ?? Guid.NewGuid(),
             ScriptName.Trim(),
@@ -1955,10 +2065,21 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             ScriptContent,
             DateTimeOffset.UtcNow,
             NormalizeScriptFolderPath(ScriptFolderPath),
-            SelectedScriptExecutionTarget == "本机" ? "Local" : "Remote");
+            SelectedScriptExecutionTarget == "本机" ? "Local" : "Remote",
+            SerializeScriptInputTemplate(inputFields),
+            inputFields);
         try
         {
             await _scriptCenterStore.SaveScriptAsync(script);
+            var defaultSaveError = (Exception?)null;
+            try
+            {
+                await _scriptExecutionInputsStore.SaveDefaultsAsync(script.Id, CreateDefaultInputs(ScriptTemplateFields));
+            }
+            catch (Exception exception)
+            {
+                defaultSaveError = exception;
+            }
             var index = Scripts.IndexOf(SelectedScript!);
             if (index >= 0)
                 Scripts[index] = script;
@@ -1966,7 +2087,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 Scripts.Insert(0, script);
             SelectedScript = script;
             RebuildScriptCatalogTree();
-            ScriptCenterStatus = $"SAVED / {script.Name}";
+            ScriptCenterStatus = defaultSaveError is null
+                ? $"SAVED / {script.Name}"
+                : $"SCRIPT SAVED / DEFAULT VALUES FAILED · {script.Name}";
+            if (defaultSaveError is not null)
+                await _syncInteraction.ShowErrorAsync("脚本已保存，但加密默认值保存失败", defaultSaveError.Message);
         }
         catch (Exception exception)
         {
@@ -1985,10 +2110,22 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         try
         {
             await _scriptCenterStore.DeleteScriptAsync(script.Id);
+            var inputCleanupFailed = false;
+            try
+            {
+                await _scriptExecutionInputsStore.DeleteAsync(script.Id);
+            }
+            catch (Exception cleanupException)
+            {
+                inputCleanupFailed = true;
+                ScriptCenterStatus = $"DELETED / INPUT CLEANUP FAILED · {script.Name}";
+                await _syncInteraction.ShowErrorAsync("脚本已删除，但未能清除本机保存的加密输入", cleanupException.Message);
+            }
             Scripts.Remove(script);
             RebuildScriptCatalogTree();
             SelectedScript = Scripts.FirstOrDefault();
-            ScriptCenterStatus = $"DELETED / {script.Name}";
+            if (!inputCleanupFailed)
+                ScriptCenterStatus = $"DELETED / {script.Name}";
         }
         catch (Exception exception)
         {
@@ -2030,8 +2167,33 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
 
         await SaveScriptAsync();
-        if (SelectedScript is not { } script || ScriptCenterStatus.StartsWith("SAVE FAILED", StringComparison.Ordinal))
+        if (SelectedScript is not { } script
+            || ScriptCenterStatus.StartsWith("SAVE FAILED", StringComparison.Ordinal)
+            || ScriptCenterStatus.StartsWith("SCRIPT SAVED / DEFAULT VALUES FAILED", StringComparison.Ordinal))
             return;
+
+        ScriptExecutionInputs? inputs;
+        try
+        {
+            var savedInputs = await _scriptExecutionInputsStore.LoadAsync(script.Id);
+            var defaults = await _scriptExecutionInputsStore.LoadDefaultsAsync(script.Id);
+            var fields = script.InputFields is { Count: > 0 } ? script.InputFields : ParseLegacyInputTemplate(script.InputTemplate);
+            var initialInputs = MergeScriptInputs(defaults, savedInputs);
+            inputs = await _scriptCenterInteraction.PromptForExecutionInputsAsync(initialInputs, fields);
+            if (inputs is not null)
+                await _scriptExecutionInputsStore.SaveAsync(script.Id, inputs);
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "INPUTS FAILED / LOCAL ENCRYPTED STORAGE";
+            await _syncInteraction.ShowErrorAsync("读取或保存脚本参数失败", exception.Message);
+            return;
+        }
+        if (inputs is null)
+        {
+            ScriptCenterStatus = "RUN CANCELLED / INPUT DIALOG CLOSED";
+            return;
+        }
 
         IsScriptRunning = true;
         _scriptRunCancellation = new CancellationTokenSource();
@@ -2081,14 +2243,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             if (isLocal)
             {
                 var workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                result = await _localScriptRunner.RunAsync(runtime, ScriptContent, workingDirectory, cancellationToken, OnLocalOutput);
+                result = await _localScriptRunner.RunAsync(runtime, ScriptContent, workingDirectory, inputs, cancellationToken, OnLocalOutput);
             }
             else
             {
                 var remoteHost = host!;
                 var connection = await ConnectWithCredentialFallbackAsync(
                     remoteHost,
-                    (value, token) => _remoteScriptRunner.RunAsync(remoteHost, value, runtime, ScriptContent, token),
+                    (value, token) => _remoteScriptRunner.RunAsync(remoteHost, value, runtime, ScriptContent, inputs, token),
                     message => _syncInteraction.ShowErrorAsync("读取本机保存的密码失败，将改为手动输入", message),
                     cancellationToken);
                 if (connection.Connection is null || connection.Credential is null)
@@ -2180,13 +2342,217 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task RunScriptOnMultipleHostsAsync()
+    {
+        if (IsScriptRunning)
+            return;
+        if (SelectedScriptExecutionTarget == "本机")
+        {
+            ScriptCenterStatus = "BATCH RUN BLOCKED / REMOTE HOSTS ONLY";
+            return;
+        }
+        if (!AvailableScriptRuntimeOptions.Contains(SelectedScriptRuntime, StringComparer.Ordinal))
+        {
+            ScriptCenterStatus = $"RUN BLOCKED / {SelectedScriptRuntime} CANNOT RUN ON REMOTE HOSTS";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(ScriptName) || string.IsNullOrWhiteSpace(ScriptContent))
+        {
+            ScriptCenterStatus = "RUN BLOCKED / SAVE A SCRIPT FIRST";
+            return;
+        }
+
+        var selectedHosts = await _scriptCenterInteraction.SelectHostsForBatchAsync(Hosts.ToArray(), SelectedHost?.Id);
+        if (selectedHosts is null)
+        {
+            ScriptCenterStatus = "BATCH RUN CANCELLED / HOST SELECTION CLOSED";
+            return;
+        }
+
+        await SaveScriptAsync();
+        if (SelectedScript is not { } script
+            || ScriptCenterStatus.StartsWith("SAVE FAILED", StringComparison.Ordinal)
+            || ScriptCenterStatus.StartsWith("SCRIPT SAVED / DEFAULT VALUES FAILED", StringComparison.Ordinal))
+            return;
+
+        ScriptExecutionInputs? inputs;
+        try
+        {
+            var savedInputs = await _scriptExecutionInputsStore.LoadAsync(script.Id);
+            var defaults = await _scriptExecutionInputsStore.LoadDefaultsAsync(script.Id);
+            var fields = script.InputFields is { Count: > 0 } ? script.InputFields : ParseLegacyInputTemplate(script.InputTemplate);
+            inputs = await _scriptCenterInteraction.PromptForExecutionInputsAsync(MergeScriptInputs(defaults, savedInputs), fields);
+            if (inputs is not null)
+                await _scriptExecutionInputsStore.SaveAsync(script.Id, inputs);
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "INPUTS FAILED / LOCAL ENCRYPTED STORAGE";
+            await _syncInteraction.ShowErrorAsync("读取或保存脚本参数失败", exception.Message);
+            return;
+        }
+        if (inputs is null)
+        {
+            ScriptCenterStatus = "BATCH RUN CANCELLED / INPUT DIALOG CLOSED";
+            return;
+        }
+
+        IsScriptRunning = true;
+        _scriptRunCancellation = new CancellationTokenSource();
+        var cancellationToken = _scriptRunCancellation.Token;
+        var runtime = ParseRuntime(SelectedScriptRuntime);
+        var scriptContent = script.Content;
+        var scriptName = script.Name;
+        var completedCount = 0;
+        var startedCount = 0;
+        var credentialUpdated = 0;
+        var results = new ConcurrentDictionary<int, ScriptRunLog>();
+        var combinedOutput = new StringBuilder();
+        try
+        {
+            try
+            {
+                await Parallel.ForEachAsync(Enumerable.Range(0, selectedHosts.Count),
+                    new ParallelOptions { MaxDegreeOfParallelism = Math.Min(3, selectedHosts.Count), CancellationToken = cancellationToken },
+                    async (index, token) =>
+                {
+                    var target = selectedHosts[index];
+                    var started = Interlocked.Increment(ref startedCount);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                        ScriptCenterStatus = $"BATCH RUNNING / {started} STARTED / {selectedHosts.Count} HOSTS");
+                    var startedAt = DateTimeOffset.UtcNow;
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    var output = string.Empty;
+                    var error = string.Empty;
+                    int? exitCode = null;
+                    try
+                    {
+                        var connection = await ConnectWithCredentialFallbackAsync(
+                            target,
+                            (secret, ct) => _remoteScriptRunner.RunAsync(target, secret, runtime, scriptContent, inputs, ct),
+                            message => Application.Current.Dispatcher.InvokeAsync(() => _syncInteraction.ShowErrorAsync("读取本机保存的密码失败，将改为手动输入", message)).Task.Unwrap(),
+                            token,
+                            _batchCredentialPromptLock);
+                        if (connection.Connection is null || connection.Credential is null)
+                        {
+                            _scriptRunCancellation?.Cancel();
+                            throw new OperationCanceledException("Credential prompt cancelled.", token);
+                        }
+                        var credential = connection.Credential;
+                        if (target.AuthenticationMethod == SshAuthenticationMethod.Password && credential.RememberOnThisDevice && !credential.WasSavedCredential)
+                        {
+                            await PersistBatchCredentialAsync(target, credential.Secret, token);
+                            Interlocked.Exchange(ref credentialUpdated, 1);
+                        }
+                        output = connection.Connection.Output;
+                        error = connection.Connection.Error;
+                        exitCode = connection.Connection.ExitCode;
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        error = "Execution cancelled by user.";
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        error = exception.Message;
+                    }
+                    finally
+                    {
+                        stopwatch.Stop();
+                    }
+
+                    var log = new ScriptRunLog(Guid.NewGuid(), script.Id, scriptName, target.Id, target.Name, startedAt,
+                        stopwatch.ElapsedMilliseconds, exitCode, output, error, exitCode == 0, "Remote");
+                    try
+                    {
+                        await _scriptCenterStore.AppendRunAsync(log, token);
+                    }
+                    catch (Exception persistException)
+                    {
+                        error = string.IsNullOrWhiteSpace(error) ? $"Run history save failed: {persistException.Message}" : $"{error}\nRun history save failed: {persistException.Message}";
+                        log = log with { Error = error, Succeeded = false };
+                    }
+                    results[index] = log;
+                    var done = Interlocked.Increment(ref completedCount);
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        RecentScriptRuns.Insert(0, log);
+                        while (RecentScriptRuns.Count > 100)
+                            RecentScriptRuns.RemoveAt(RecentScriptRuns.Count - 1);
+                        ScriptCenterStatus = $"BATCH RUNNING / {done} OF {selectedHosts.Count} COMPLETE";
+                    });
+                });
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Completed hosts retain their individual results; unfinished hosts stop.
+            }
+            if (credentialUpdated != 0)
+                await LoadAsync(CancellationToken.None);
+
+            foreach (var result in results.OrderBy(pair => pair.Key).Select(pair => pair.Value))
+            {
+                combinedOutput.AppendLine($"===== {result.HostName} / {(result.ExitCode is null ? "ERROR" : $"EXIT {result.ExitCode}")} =====");
+                if (!string.IsNullOrEmpty(result.Output)) combinedOutput.AppendLine(result.Output.TrimEnd());
+                if (!string.IsNullOrWhiteSpace(result.Error)) combinedOutput.AppendLine($"STDERR: {result.Error.TrimEnd()}");
+            }
+            var succeeded = results.Values.Count(result => result.Succeeded);
+            var failed = results.Count - succeeded;
+            var wasCancelled = cancellationToken.IsCancellationRequested;
+            if (results.Count > 0)
+            {
+                var last = results.OrderBy(pair => pair.Key).Last().Value;
+                SelectedScriptRun = last with { Output = combinedOutput.ToString(), TargetType = "Batch" };
+            }
+            ScriptCenterStatus = wasCancelled
+                ? $"BATCH CANCELLED / {succeeded} SUCCESS / {failed} FAILED / {results.Count} OF {selectedHosts.Count} COMPLETED"
+                : $"BATCH COMPLETE / {succeeded} SUCCESS / {failed} FAILED";
+            StatusMessage = $"SCRIPT BATCH / {succeeded} SUCCESS / {failed} FAILED";
+        }
+        finally
+        {
+            _scriptRunCancellation?.Dispose();
+            _scriptRunCancellation = null;
+            IsScriptRunning = false;
+        }
+    }
+
+    private async Task PersistBatchCredentialAsync(HostProfile host, string secret, CancellationToken cancellationToken)
+    {
+        await _batchCredentialPersistenceLock.WaitAsync(cancellationToken);
+        try
+        {
+            var previousReference = host.CredentialReference;
+            var newReference = await _credentialStore.StoreAsync(secret, cancellationToken);
+            try
+            {
+                await _hostRepository.SaveAsync(host with { CredentialReference = newReference }, cancellationToken);
+            }
+            catch
+            {
+                try { await _credentialStore.DeleteAsync(newReference, CancellationToken.None); }
+                catch { /* Preserve the host persistence error. */ }
+                throw;
+            }
+            if (!string.IsNullOrWhiteSpace(previousReference) && previousReference != newReference)
+            {
+                try { await _credentialStore.DeleteAsync(previousReference, cancellationToken); }
+                catch { /* The new credential reference is already committed. */ }
+            }
+        }
+        finally { _batchCredentialPersistenceLock.Release(); }
+    }
+
+    [RelayCommand]
     private void CancelScriptRun() => _scriptRunCancellation?.Cancel();
 
     private async Task<(T? Connection, ConnectionCredential? Credential)> ConnectWithCredentialFallbackAsync<T>(
         HostProfile host,
         Func<string, CancellationToken, Task<T>> connect,
         Func<string, Task> showCredentialReadError,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SemaphoreSlim? promptLock = null)
         where T : class
     {
         string? savedSecret = null;
@@ -2218,7 +2584,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             }
         }
 
-        var credential = await _credentialPrompt.PromptForSecretAsync(host, savedSecret: null);
+        if (promptLock is not null)
+            await promptLock.WaitAsync(cancellationToken);
+        ConnectionCredential? credential;
+        try { credential = await _credentialPrompt.PromptForSecretAsync(host, savedSecret: null); }
+        finally { promptLock?.Release(); }
         if (credential is null)
             return (null, null);
 
@@ -2354,6 +2724,115 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private static string NormalizeScriptFolderPath(string path) => string.Join('/',
         path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(segment => segment is not "." and not ".."));
+
+    private static IReadOnlyList<ScriptInputFieldDefinition> ParseLegacyInputTemplate(string? template) =>
+        (template ?? string.Empty).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => (Line: line, Kind: line.StartsWith("ARG:", StringComparison.OrdinalIgnoreCase) ? "ARG" : line.StartsWith("ENV:", StringComparison.OrdinalIgnoreCase) ? "ENV" : string.Empty))
+            .Where(item => item.Kind.Length > 0 && item.Line.Length > 4 && !string.IsNullOrWhiteSpace(item.Line[4..]))
+            .Select(item => new ScriptInputFieldDefinition(item.Kind, item.Line[4..].Trim()))
+            .ToArray();
+
+    private static IReadOnlyList<ScriptInputFieldDefinition> SerializeScriptInputFields(IEnumerable<ScriptTemplateFieldViewModel> fields) =>
+        fields.Where(field => !string.IsNullOrWhiteSpace(field.Name))
+            .Select(field => new ScriptInputFieldDefinition(
+                field.Kind == "ENV" ? "ENV" : "ARG",
+                field.Name.Trim(),
+                ParseInputTypeName(field.ValueType),
+                field.IsRequired,
+                field.IsSensitive || field.ValueType == "密码",
+                field.Options.Trim(),
+                field.Group.Trim()))
+            .ToArray();
+
+    private static string SerializeScriptInputTemplate(IEnumerable<ScriptInputFieldDefinition> fields) => string.Join(Environment.NewLine,
+        fields.Select(field => $"{field.Kind}: {field.Name}"));
+
+    private static string? ValidateScriptInputFields(IReadOnlyList<ScriptInputFieldDefinition> fields)
+    {
+        foreach (var kind in new[] { "ARG", "ENV" })
+        {
+            var duplicate = fields.Where(field => field.Kind == kind)
+                .GroupBy(field => field.Name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1);
+            if (duplicate is not null)
+                return $"{kind} 名称重复：{duplicate.Key}";
+        }
+        foreach (var field in fields.Where(field => field.Kind == "ENV"))
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(field.Name, "^[A-Za-z_][A-Za-z0-9_]*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                return $"环境变量名称无效：{field.Name}";
+            if (field.Name.Equals("ONLYSHELL_ARG_COUNT", StringComparison.OrdinalIgnoreCase)
+                || field.Name.StartsWith("ONLYSHELL_ARG_", StringComparison.OrdinalIgnoreCase))
+                return $"{field.Name} 是 OnlyShell 为 CMD 参数保留的名称。";
+        }
+        foreach (var field in fields.Where(field => field.ValueType == ScriptInputValueType.Choice))
+            if (string.IsNullOrWhiteSpace(field.Options))
+                return $"选项参数“{field.Name}”至少需要配置一个选项。";
+        return null;
+    }
+
+    private static ScriptInputValueType ParseInputTypeName(string value) => value switch
+    {
+        "数字" => ScriptInputValueType.Number,
+        "布尔" => ScriptInputValueType.Boolean,
+        "路径" => ScriptInputValueType.Path,
+        "选项" => ScriptInputValueType.Choice,
+        "密码" => ScriptInputValueType.Secret,
+        _ => ScriptInputValueType.Text
+    };
+
+    private static string InputTypeName(ScriptInputValueType value) => value switch
+    {
+        ScriptInputValueType.Number => "数字",
+        ScriptInputValueType.Boolean => "布尔",
+        ScriptInputValueType.Path => "路径",
+        ScriptInputValueType.Choice => "选项",
+        ScriptInputValueType.Secret => "密码",
+        _ => "文本"
+    };
+
+    private static ScriptExecutionInputs CreateDefaultInputs(IEnumerable<ScriptTemplateFieldViewModel> fields) =>
+        new(fields.Where(field => field.Kind == "ARG").Select(field => field.DefaultValue).ToArray(),
+            new Dictionary<string, string>(fields.Where(field => field.Kind == "ENV")
+                .Select(field => new KeyValuePair<string, string>(field.Name.Trim(), field.DefaultValue)), StringComparer.OrdinalIgnoreCase));
+
+    private static ScriptExecutionInputs MergeScriptInputs(ScriptExecutionInputs? defaults, ScriptExecutionInputs? lastInputs)
+    {
+        defaults ??= new ScriptExecutionInputs([], new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        if (lastInputs is null)
+            return defaults;
+        var argCount = Math.Max(defaults.Arguments.Count, lastInputs.Arguments.Count);
+        var arguments = Enumerable.Range(0, argCount)
+            .Select(index => index < lastInputs.Arguments.Count && lastInputs.Arguments[index].Length > 0
+                ? lastInputs.Arguments[index]
+                : index < defaults.Arguments.Count ? defaults.Arguments[index] : string.Empty)
+            .ToArray();
+        var environment = new Dictionary<string, string>(defaults.EnvironmentVariables, StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in lastInputs.EnvironmentVariables)
+            environment[pair.Key] = pair.Value;
+        return new ScriptExecutionInputs(arguments, environment);
+    }
+
+    private async Task LoadScriptInputDefaultsAsync(Guid scriptId)
+    {
+        try
+        {
+            var defaults = await _scriptExecutionInputsStore.LoadDefaultsAsync(scriptId);
+            if (defaults is null || SelectedScript?.Id != scriptId)
+                return;
+            var arguments = ScriptTemplateFields.Where(field => field.Kind == "ARG").ToArray();
+            for (var index = 0; index < arguments.Length && index < defaults.Arguments.Count; index++)
+                arguments[index].DefaultValue = defaults.Arguments[index];
+            foreach (var field in ScriptTemplateFields.Where(field => field.Kind == "ENV"))
+                if (defaults.EnvironmentVariables.TryGetValue(field.Name, out var value))
+                    field.DefaultValue = value;
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "INPUT DEFAULTS LOAD FAILED";
+            Application.Current?.Dispatcher.BeginInvoke(() => _ = _syncInteraction.ShowErrorAsync("读取加密参数默认值失败", exception.Message));
+        }
+    }
 
     private async Task SaveAndRefreshAsync(HostProfile profile)
     {
