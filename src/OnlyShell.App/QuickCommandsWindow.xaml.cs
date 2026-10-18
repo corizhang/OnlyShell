@@ -299,19 +299,23 @@ public partial class QuickCommandsWindow : Window
         _variableInputs.Clear();
         foreach (var variable in _variables.Where(item => Regex.IsMatch(item.Name.Trim(), "^[A-Za-z_][A-Za-z0-9_]*$")))
         {
-            var field = new StackPanel { Width = 190, Margin = new Thickness(0, 0, 8, 5) };
+            var field = new StackPanel
+            {
+                Width = (double)FindResource("Control.QuickCommand.VariableFieldWidth"),
+                Margin = (Thickness)FindResource("Space.QuickCommand.VariableField.Margin")
+            };
             field.Children.Add(new TextBlock
             {
                 Text = $"{(string.IsNullOrWhiteSpace(variable.Label) ? variable.Name : variable.Label)}{(variable.Required ? " *" : "")}{(variable.Secret ? " · SECRET" : "")}",
-                Foreground = (System.Windows.Media.Brush)FindResource("MutedBrush"),
-                FontFamily = new System.Windows.Media.FontFamily("Cascadia Code"),
-                FontSize = 8,
+                Foreground = (System.Windows.Media.Brush)FindResource("Brush.Text.Secondary"),
+                FontFamily = (System.Windows.Media.FontFamily)FindResource("Font.Mono"),
+                FontSize = (double)FindResource("Type.Size.Caption"),
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
             Control input;
             if (variable.Secret)
             {
-                var password = new PasswordBox { Height = 25, Padding = new Thickness(5, 3, 5, 3), Margin = new Thickness(0, 2, 0, 0), Background = (System.Windows.Media.Brush)FindResource("SurfaceBrush"), Foreground = (System.Windows.Media.Brush)FindResource("TextBrush"), BorderBrush = (System.Windows.Media.Brush)FindResource("LineBrush") };
+                var password = new PasswordBox { Height = (double)FindResource("Control.InputHeight.Dense"), Padding = (Thickness)FindResource("Space.Input.Padding.Dense"), Margin = (Thickness)FindResource("Space.Gap.Top.XXS"), Background = (System.Windows.Media.Brush)FindResource("Brush.Surface.Input"), Foreground = (System.Windows.Media.Brush)FindResource("Brush.Text.Primary"), BorderBrush = (System.Windows.Media.Brush)FindResource("Brush.Border.Subtle") };
                 password.Password = "";
                 password.PasswordChanged += (_, _) => UpdatePreview();
                 input = password;
@@ -319,7 +323,7 @@ public partial class QuickCommandsWindow : Window
             else
             {
                 var remembered = variable.Secret || !variable.RememberValue ? "" : variable.LastValue;
-                var textBox = new TextBox { Height = 25, Padding = new Thickness(5, 3, 5, 3), Margin = new Thickness(0, 2, 0, 0), Background = (System.Windows.Media.Brush)FindResource("SurfaceBrush"), Foreground = (System.Windows.Media.Brush)FindResource("TextBrush"), BorderBrush = (System.Windows.Media.Brush)FindResource("LineBrush"), Text = previousValues.GetValueOrDefault(variable.Name.Trim()) ?? (remembered.Length > 0 ? remembered : variable.DefaultValue) };
+                var textBox = new TextBox { Height = (double)FindResource("Control.InputHeight.Dense"), Padding = (Thickness)FindResource("Space.Input.Padding.Dense"), Margin = (Thickness)FindResource("Space.Gap.Top.XXS"), Background = (System.Windows.Media.Brush)FindResource("Brush.Surface.Input"), Foreground = (System.Windows.Media.Brush)FindResource("Brush.Text.Primary"), BorderBrush = (System.Windows.Media.Brush)FindResource("Brush.Border.Subtle"), Text = previousValues.GetValueOrDefault(variable.Name.Trim()) ?? (remembered.Length > 0 ? remembered : variable.DefaultValue) };
                 textBox.TextChanged += (_, _) => UpdatePreview();
                 input = textBox;
             }
@@ -334,7 +338,7 @@ public partial class QuickCommandsWindow : Window
         if (PreviewText is null) return;
         var rendered = RenderCommand(redactSecrets: true, out var error);
         PreviewText.Text = error ?? rendered;
-        PreviewText.Foreground = (System.Windows.Media.Brush)FindResource(error is null ? "SyntaxGreenBrush" : "AccentBrush");
+        PreviewText.Foreground = (System.Windows.Media.Brush)FindResource(error is null ? "Brush.Status.Success" : "Brush.Accent.Primary");
     }
 
     private string RenderCommand(bool redactSecrets, out string? error)

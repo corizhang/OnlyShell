@@ -22,7 +22,7 @@ public partial class SyncPromptWindow : Window
         if (!isSecret && confirmSecret)
         {
             AcceptButton.Content = "继续";
-            AcceptButton.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E68174"));
+            AcceptButton.Background = (System.Windows.Media.Brush)FindResource("Brush.Status.Error");
         }
     }
 

@@ -40,7 +40,7 @@ public partial class ServerMetricsView : UserControl
         if (width <= 1 || height <= 1)
             return;
 
-        var gridBrush = new SolidColorBrush(Color.FromRgb(43, 42, 49));
+        var gridBrush = (Brush)FindResource("Brush.Border.MetricsChartGrid");
         foreach (var fraction in new[] { 0.0, 0.5, 1.0 })
         {
             var y = Math.Round(height * fraction) + 0.5;
@@ -60,10 +60,10 @@ public partial class ServerMetricsView : UserControl
             return;
 
         var networkMax = Math.Max(1, samples.Max(sample => sample.NetworkBytesPerSecond));
-        AddSeries(samples.Select(sample => sample.CpuPercent), Color.FromRgb(235, 170, 48), width, height, 100);
-        AddSeries(samples.Select(sample => sample.MemoryPercent), Color.FromRgb(85, 207, 229), width, height, 100);
-        AddSeries(samples.Select(sample => sample.DiskPercent), Color.FromRgb(91, 220, 144), width, height, 100);
-        AddSeries(samples.Select(sample => sample.NetworkBytesPerSecond), Color.FromRgb(181, 140, 255), width, height, networkMax);
+        AddSeries(samples.Select(sample => sample.CpuPercent), ((SolidColorBrush)FindResource("Brush.Status.WarningBright")).Color, width, height, 100);
+        AddSeries(samples.Select(sample => sample.MemoryPercent), ((SolidColorBrush)FindResource("Brush.Status.InfoBright")).Color, width, height, 100);
+        AddSeries(samples.Select(sample => sample.DiskPercent), ((SolidColorBrush)FindResource("Brush.Status.SuccessBright")).Color, width, height, 100);
+        AddSeries(samples.Select(sample => sample.NetworkBytesPerSecond), ((SolidColorBrush)FindResource("Brush.Accent.Purple")).Color, width, height, networkMax);
     }
 
     private void AddSeries(IEnumerable<double> values, Color color, double width, double height, double maximum)

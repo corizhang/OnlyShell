@@ -1,0 +1,210 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- Palette tokens: semantic names describe usage; palette values stay here. -->
+    <Color x:Key="Color.Canvas">#151419</Color>
+    <Color x:Key="Color.Surface">#1B1A20</Color>
+    <Color x:Key="Color.Surface.Raised">#242229</Color>
+    <Color x:Key="Color.Surface.Input">#111015</Color>
+    <Color x:Key="Color.Surface.Editor">#0B1018</Color>
+    <Color x:Key="Color.Surface.Terminal">#050505</Color>
+    <Color x:Key="Color.Surface.Output">#080D0B</Color>
+    <Color x:Key="Color.Surface.Hover">#2A2830</Color>
+    <Color x:Key="Color.Surface.Selected">#3A3326</Color>
+    <Color x:Key="Color.Surface.SelectedHover">#49402F</Color>
+    <Color x:Key="Color.Surface.SelectionQuiet">#29251D</Color>
+    <Color x:Key="Color.Surface.HoverSubtle">#1C1A20</Color>
+    <Color x:Key="Color.Surface.ListHover">#1E1C23</Color>
+    <Color x:Key="Color.Surface.Disabled">#19181D</Color>
+    <Color x:Key="Color.Surface.StatusBar">#17161B</Color>
+    <Color x:Key="Color.Surface.Warning">#201D17</Color>
+    <Color x:Key="Color.Surface.MetricTrack">#29272E</Color>
+    <Color x:Key="Color.Surface.Metric">#0B0C10</Color>
+    <Color x:Key="Color.Border.Subtle">#343139</Color>
+    <Color x:Key="Color.Border.Default">#45414C</Color>
+    <Color x:Key="Color.Border.Strong">#514D58</Color>
+    <Color x:Key="Color.Border.Focus">#56C8CF</Color>
+    <Color x:Key="Color.Border.Selected">#8D6825</Color>
+    <Color x:Key="Color.Border.Disabled">#302E35</Color>
+    <Color x:Key="Color.Border.Success">#254735</Color>
+    <Color x:Key="Color.Border.Warning">#544326</Color>
+    <Color x:Key="Color.Border.Dialog">#39363F</Color>
+    <Color x:Key="Color.Border.Error">#8C4744</Color>
+    <Color x:Key="Color.Border.MetricsChartGrid">#2B2A31</Color>
+    <Color x:Key="Color.Text.Primary">#E5E2E8</Color>
+    <Color x:Key="Color.Text.Secondary">#96919D</Color>
+    <Color x:Key="Color.Text.Disabled">#77737D</Color>
+    <Color x:Key="Color.Text.OnAccent">#17151A</Color>
+    <Color x:Key="Color.Text.OnSelected">#FFF4D6</Color>
+    <Color x:Key="Color.Text.Header">#C9C5CE</Color>
+    <Color x:Key="Color.Text.Highlight">#FFFFFF</Color>
+    <Color x:Key="Color.Text.HighEmphasis">#E8E6EB</Color>
+    <Color x:Key="Color.Text.Tertiary">#77727E</Color>
+    <Color x:Key="Color.Text.TerminalDefault">#DCE6F2</Color>
+    <Color x:Key="Color.Text.TerminalSuccess">#8ED6A5</Color>
+    <Color x:Key="Color.Text.Terminal">#DEDDE1</Color>
+    <Color x:Key="Color.Icon.Muted">#AAA5AF</Color>
+    <Color x:Key="Color.Accent.Primary">#E7A92F</Color>
+    <Color x:Key="Color.Accent.Hover">#E7A92E</Color>
+    <Color x:Key="Color.Status.Success">#63C985</Color>
+    <Color x:Key="Color.Status.Info">#56C8CF</Color>
+    <Color x:Key="Color.Status.Warning">#E7A92F</Color>
+    <Color x:Key="Color.Status.Error">#E68174</Color>
+    <Color x:Key="Color.Status.InfoBright">#55CFE5</Color>
+    <Color x:Key="Color.Status.WarningBright">#EBAA30</Color>
+    <Color x:Key="Color.Status.SuccessBright">#5BDC90</Color>
+    <Color x:Key="Color.Accent.Purple">#B58CFF</Color>
+    <Color x:Key="Color.Surface.TerminalToolbar">#222128</Color>
+    <Color x:Key="Color.Surface.TerminalPopup">#25232B</Color>
+    <Color x:Key="Color.Surface.Error">#211B1C</Color>
+    <Color x:Key="Color.Surface.ListRow">#15141A</Color>
+    <Color x:Key="Color.Surface.ListRowAlt">#19181F</Color>
+    <Color x:Key="Color.Surface.EditorAlt">#0B0D12</Color>
+    <Color x:Key="Color.Syntax.Keyword">#C586C0</Color>
+    <Color x:Key="Color.Syntax.String">#CE9178</Color>
+    <Color x:Key="Color.Syntax.Comment">#6A9955</Color>
+    <Color x:Key="Color.Syntax.Number">#B5CEA8</Color>
+    <Color x:Key="Color.Syntax.Variable">#9CDCFE</Color>
+
+    <SolidColorBrush x:Key="Brush.Canvas" Color="{StaticResource Color.Canvas}" />
+    <SolidColorBrush x:Key="Brush.Surface" Color="{StaticResource Color.Surface}" />
+    <SolidColorBrush x:Key="Brush.Surface.Raised" Color="{StaticResource Color.Surface.Raised}" />
+    <SolidColorBrush x:Key="Brush.Surface.Input" Color="{StaticResource Color.Surface.Input}" />
+    <SolidColorBrush x:Key="Brush.Surface.Editor" Color="{StaticResource Color.Surface.Editor}" />
+    <SolidColorBrush x:Key="Brush.Surface.Terminal" Color="{StaticResource Color.Surface.Terminal}" />
+    <SolidColorBrush x:Key="Brush.Surface.Output" Color="{StaticResource Color.Surface.Output}" />
+    <SolidColorBrush x:Key="Brush.Surface.Hover" Color="{StaticResource Color.Surface.Hover}" />
+    <SolidColorBrush x:Key="Brush.Surface.Selected" Color="{StaticResource Color.Surface.Selected}" />
+    <SolidColorBrush x:Key="Brush.Surface.SelectedHover" Color="{StaticResource Color.Surface.SelectedHover}" />
+    <SolidColorBrush x:Key="Brush.Surface.SelectionQuiet" Color="{StaticResource Color.Surface.SelectionQuiet}" />
+    <SolidColorBrush x:Key="Brush.Surface.HoverSubtle" Color="{StaticResource Color.Surface.HoverSubtle}" />
+    <SolidColorBrush x:Key="Brush.Surface.ListHover" Color="{StaticResource Color.Surface.ListHover}" />
+    <SolidColorBrush x:Key="Brush.Surface.Disabled" Color="{StaticResource Color.Surface.Disabled}" />
+    <SolidColorBrush x:Key="Brush.Surface.StatusBar" Color="{StaticResource Color.Surface.StatusBar}" />
+    <SolidColorBrush x:Key="Brush.Surface.Warning" Color="{StaticResource Color.Surface.Warning}" />
+    <SolidColorBrush x:Key="Brush.Surface.MetricTrack" Color="{StaticResource Color.Surface.MetricTrack}" />
+    <SolidColorBrush x:Key="Brush.Surface.Metric" Color="{StaticResource Color.Surface.Metric}" />
+    <SolidColorBrush x:Key="Brush.Border.Subtle" Color="{StaticResource Color.Border.Subtle}" />
+    <SolidColorBrush x:Key="Brush.Border.Default" Color="{StaticResource Color.Border.Default}" />
+    <SolidColorBrush x:Key="Brush.Border.Strong" Color="{StaticResource Color.Border.Strong}" />
+    <SolidColorBrush x:Key="Brush.Border.Focus" Color="{StaticResource Color.Border.Focus}" />
+    <SolidColorBrush x:Key="Brush.Border.Selected" Color="{StaticResource Color.Border.Selected}" />
+    <SolidColorBrush x:Key="Brush.Border.Disabled" Color="{StaticResource Color.Border.Disabled}" />
+    <SolidColorBrush x:Key="Brush.Border.Success" Color="{StaticResource Color.Border.Success}" />
+    <SolidColorBrush x:Key="Brush.Border.Warning" Color="{StaticResource Color.Border.Warning}" />
+    <SolidColorBrush x:Key="Brush.Border.Dialog" Color="{StaticResource Color.Border.Dialog}" />
+    <SolidColorBrush x:Key="Brush.Border.Error" Color="{StaticResource Color.Border.Error}" />
+    <SolidColorBrush x:Key="Brush.Border.MetricsChartGrid" Color="{StaticResource Color.Border.MetricsChartGrid}" />
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="{StaticResource Color.Text.Primary}" />
+    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="{StaticResource Color.Text.Secondary}" />
+    <SolidColorBrush x:Key="Brush.Text.Disabled" Color="{StaticResource Color.Text.Disabled}" />
+    <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="{StaticResource Color.Text.OnAccent}" />
+    <SolidColorBrush x:Key="Brush.Text.OnSelected" Color="{StaticResource Color.Text.OnSelected}" />
+    <SolidColorBrush x:Key="Brush.Text.Header" Color="{StaticResource Color.Text.Header}" />
+    <SolidColorBrush x:Key="Brush.Text.Highlight" Color="{StaticResource Color.Text.Highlight}" />
+    <SolidColorBrush x:Key="Brush.Text.HighEmphasis" Color="{StaticResource Color.Text.HighEmphasis}" />
+    <SolidColorBrush x:Key="Brush.Text.Tertiary" Color="{StaticResource Color.Text.Tertiary}" />
+    <SolidColorBrush x:Key="Brush.Text.TerminalDefault" Color="{StaticResource Color.Text.TerminalDefault}" />
+    <SolidColorBrush x:Key="Brush.Text.TerminalSuccess" Color="{StaticResource Color.Text.TerminalSuccess}" />
+    <SolidColorBrush x:Key="Brush.Text.Terminal" Color="{StaticResource Color.Text.Terminal}" />
+    <SolidColorBrush x:Key="Brush.Icon.Muted" Color="{StaticResource Color.Icon.Muted}" />
+    <SolidColorBrush x:Key="Brush.Accent.Primary" Color="{StaticResource Color.Accent.Primary}" />
+    <SolidColorBrush x:Key="Brush.Status.Success" Color="{StaticResource Color.Status.Success}" />
+    <SolidColorBrush x:Key="Brush.Status.Info" Color="{StaticResource Color.Status.Info}" />
+    <SolidColorBrush x:Key="Brush.Status.Warning" Color="{StaticResource Color.Status.Warning}" />
+    <SolidColorBrush x:Key="Brush.Status.Error" Color="{StaticResource Color.Status.Error}" />
+    <SolidColorBrush x:Key="Brush.Status.InfoBright" Color="{StaticResource Color.Status.InfoBright}" />
+    <SolidColorBrush x:Key="Brush.Status.WarningBright" Color="{StaticResource Color.Status.WarningBright}" />
+    <SolidColorBrush x:Key="Brush.Status.SuccessBright" Color="{StaticResource Color.Status.SuccessBright}" />
+    <SolidColorBrush x:Key="Brush.Accent.Purple" Color="{StaticResource Color.Accent.Purple}" />
+    <SolidColorBrush x:Key="Brush.Surface.TerminalToolbar" Color="{StaticResource Color.Surface.TerminalToolbar}" />
+    <SolidColorBrush x:Key="Brush.Surface.TerminalPopup" Color="{StaticResource Color.Surface.TerminalPopup}" />
+    <SolidColorBrush x:Key="Brush.Surface.Error" Color="{StaticResource Color.Surface.Error}" />
+    <SolidColorBrush x:Key="Brush.Surface.ListRow" Color="{StaticResource Color.Surface.ListRow}" />
+    <SolidColorBrush x:Key="Brush.Surface.ListRowAlt" Color="{StaticResource Color.Surface.ListRowAlt}" />
+    <SolidColorBrush x:Key="Brush.Surface.EditorAlt" Color="{StaticResource Color.Surface.EditorAlt}" />
+    <SolidColorBrush x:Key="Brush.Accent.Hover" Color="{StaticResource Color.Accent.Hover}" />
+    <SolidColorBrush x:Key="Brush.Syntax.Keyword" Color="{StaticResource Color.Syntax.Keyword}" />
+    <SolidColorBrush x:Key="Brush.Syntax.String" Color="{StaticResource Color.Syntax.String}" />
+    <SolidColorBrush x:Key="Brush.Syntax.Comment" Color="{StaticResource Color.Syntax.Comment}" />
+    <SolidColorBrush x:Key="Brush.Syntax.Number" Color="{StaticResource Color.Syntax.Number}" />
+    <SolidColorBrush x:Key="Brush.Syntax.Variable" Color="{StaticResource Color.Syntax.Variable}" />
+
+    <!-- Typography and layout tokens. -->
+    <FontFamily x:Key="Font.UI">Segoe UI</FontFamily>
+    <FontFamily x:Key="Font.Window">Segoe UI Variable Text</FontFamily>
+    <FontFamily x:Key="Font.Mono">Cascadia Code</FontFamily>
+    <FontFamily x:Key="Font.Terminal">Cascadia Mono</FontFamily>
+    <FontFamily x:Key="Font.Emoji">Segoe UI Emoji</FontFamily>
+    <sys:Double x:Key="Type.Size.Caption">8</sys:Double>
+    <sys:Double x:Key="Type.Size.Tiny">7</sys:Double>
+    <sys:Double x:Key="Type.Size.MetricTiny">6</sys:Double>
+    <sys:Double x:Key="Type.Size.Label">9</sys:Double>
+    <sys:Double x:Key="Type.Size.Small">10</sys:Double>
+    <sys:Double x:Key="Type.Size.Body">11</sys:Double>
+    <sys:Double x:Key="Type.Size.BodyLarge">12</sys:Double>
+    <sys:Double x:Key="Type.Size.BodyEmphasis">13</sys:Double>
+    <sys:Double x:Key="Type.Size.Terminal">14</sys:Double>
+    <sys:Double x:Key="Type.Size.Heading">18</sys:Double>
+    <sys:Double x:Key="Type.Size.HeadingSmall">17</sys:Double>
+    <sys:Double x:Key="Type.Size.Title">16</sys:Double>
+    <sys:Double x:Key="Type.Size.SectionTitle">19</sys:Double>
+    <sys:Double x:Key="Type.Size.Display">20</sys:Double>
+    <sys:Double x:Key="Type.Size.PageTitle">22</sys:Double>
+    <sys:Double x:Key="Space.XXS">2</sys:Double>
+    <sys:Double x:Key="Space.XS">4</sys:Double>
+    <sys:Double x:Key="Space.SM">6</sys:Double>
+    <sys:Double x:Key="Space.MD">8</sys:Double>
+    <sys:Double x:Key="Space.LG">12</sys:Double>
+    <sys:Double x:Key="Space.XL">16</sys:Double>
+    <sys:Double x:Key="Space.XXL">24</sys:Double>
+    <sys:Double x:Key="Control.RowHeight">27</sys:Double>
+    <sys:Double x:Key="Control.InputHeight">27</sys:Double>
+    <GridLength x:Key="Control.SplitView.ToolbarRowHeight">27</GridLength>
+    <sys:Double x:Key="Control.InputHeight.Regular">32</sys:Double>
+    <sys:Double x:Key="Control.InputHeight.Dense">25</sys:Double>
+    <GridLength x:Key="Control.FormFieldRowHeight">42</GridLength>
+    <sys:Double x:Key="Control.SplitterGripSize">5</sys:Double>
+    <GridLength x:Key="Control.Tab.ActiveIndicatorRowHeight">2</GridLength>
+    <sys:Double x:Key="Control.TransferButtonWidth">38</sys:Double>
+    <sys:Double x:Key="Control.TransferButtonHeight">34</sys:Double>
+    <sys:Double x:Key="Control.QuickCommand.VariableFieldWidth">190</sys:Double>
+    <sys:Double x:Key="Control.ScriptInput.LabelColumnWidth">150</sys:Double>
+    <sys:Double x:Key="Control.ScriptInput.ValueMinWidth">100</sys:Double>
+    <sys:Double x:Key="Control.ScriptInput.RemoveButtonWidth">26</sys:Double>
+    <sys:Double x:Key="Control.Terminal.SelectionToolbar.Width">180</sys:Double>
+    <sys:Double x:Key="Control.Terminal.SelectionToolbar.Height">38</sys:Double>
+    <sys:Double x:Key="Dialog.Width.Connection">560</sys:Double>
+    <sys:Double x:Key="Dialog.MinWidth.Connection">520</sys:Double>
+    <sys:Double x:Key="Dialog.MinWidth.Compact">420</sys:Double>
+    <Thickness x:Key="Space.HeaderPadding">7,5</Thickness>
+    <Thickness x:Key="Space.RowPadding">5,3</Thickness>
+    <Thickness x:Key="Space.ComboPadding">7,3</Thickness>
+    <Thickness x:Key="Space.ComboOptionPadding">8,3</Thickness>
+    <Thickness x:Key="Space.Inset.LG">18</Thickness>
+    <Thickness x:Key="Space.Input.Padding">6,4</Thickness>
+    <Thickness x:Key="Space.Input.Padding.Dense">5,3</Thickness>
+    <Thickness x:Key="Space.Button.Padding">10,6</Thickness>
+    <Thickness x:Key="Space.Tab.Padding">8,4</Thickness>
+    <Thickness x:Key="Space.Tab.Margin">1,0,1,0</Thickness>
+    <Thickness x:Key="Space.QuickCommand.VariableField.Margin">0,0,8,5</Thickness>
+    <Thickness x:Key="Space.ScriptInput.Row.Margin">0,0,0,6</Thickness>
+    <Thickness x:Key="Space.ScriptInput.GroupHeader.Margin.First">0,2,0,5</Thickness>
+    <Thickness x:Key="Space.ScriptInput.GroupHeader.Margin.Next">0,10,0,5</Thickness>
+    <Thickness x:Key="Space.Terminal.SelectionToolbar.Offset">6</Thickness>
+    <Thickness x:Key="Space.Gap.Top.XXS">0,2,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Top.XS">0,3,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Top.SM">0,4,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Top.MD">0,5,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Top.LG">0,8,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Top.XL">0,10,0,0</Thickness>
+    <Thickness x:Key="Space.Gap.Bottom.XS">0,0,0,4</Thickness>
+    <Thickness x:Key="Space.Gap.Bottom.SM">0,0,0,5</Thickness>
+    <Thickness x:Key="Space.Gap.Bottom.MD">0,0,0,6</Thickness>
+    <Thickness x:Key="Space.Gap.Bottom.LG">0,0,0,8</Thickness>
+    <Thickness x:Key="Space.Gap.Right.XS">0,0,4,0</Thickness>
+    <Thickness x:Key="Space.Gap.Right.SM">0,0,5,0</Thickness>
+    <Thickness x:Key="Space.Gap.Right.MD">0,0,6,0</Thickness>
+    <Thickness x:Key="Space.Gap.Right.LG">0,0,8,0</Thickness>
+
+</ResourceDictionary>

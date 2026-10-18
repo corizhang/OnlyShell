@@ -132,7 +132,11 @@ public partial class TerminalControl : Control, IDisposable
     }
 
     /// <summary>Gets or sets whether pasting clipboard content containing line breaks requires confirmation.</summary>
-    public bool ConfirmMultiLinePaste { get; set; } = true;
+    public bool ConfirmMultiLinePaste
+    {
+        get => (bool)GetValue(ConfirmMultiLinePasteProperty);
+        set => SetValue(ConfirmMultiLinePasteProperty, value);
+    }
 
     /// <summary>
     /// Gets or sets whether the floating "scroll to bottom" button is enabled.
@@ -1392,6 +1396,11 @@ public partial class TerminalControl : Control, IDisposable
     /// <summary>Defines the <see cref="ScrollDownVisible"/> dependency property.</summary>
     public static readonly DependencyProperty ScrollDownVisibleProperty = DependencyProperty.Register(
         nameof(ScrollDownVisible), typeof(bool), typeof(TerminalControl),
+        new PropertyMetadata(defaultValue: true));
+
+    /// <summary>Defines the <see cref="ConfirmMultiLinePaste"/> dependency property.</summary>
+    public static readonly DependencyProperty ConfirmMultiLinePasteProperty = DependencyProperty.Register(
+        nameof(ConfirmMultiLinePaste), typeof(bool), typeof(TerminalControl),
         new PropertyMetadata(defaultValue: true));
 
     /// <summary>Defines the <see cref="ScreenBackground"/> dependency property.</summary>

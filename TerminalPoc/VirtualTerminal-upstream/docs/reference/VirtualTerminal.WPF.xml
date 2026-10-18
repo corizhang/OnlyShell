@@ -751,6 +751,9 @@
         <member name="F:VirtualTerminal.TerminalControl.ScrollDownVisibleProperty">
             <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScrollDownVisible"/> dependency property.</summary>
         </member>
+        <member name="F:VirtualTerminal.TerminalControl.ConfirmMultiLinePasteProperty">
+            <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ConfirmMultiLinePaste"/> dependency property.</summary>
+        </member>
         <member name="F:VirtualTerminal.TerminalControl.ScreenBackgroundProperty">
             <summary>Defines the <see cref="P:VirtualTerminal.TerminalControl.ScreenBackground"/> dependency property.</summary>
         </member>

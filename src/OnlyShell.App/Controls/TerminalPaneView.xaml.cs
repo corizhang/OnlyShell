@@ -51,10 +51,11 @@ public partial class TerminalPaneView : UserControl
             return;
         }
 
-        const double toolbarWidth = 180;
-        const double toolbarHeight = 38;
+        var toolbarWidth = (double)FindResource("Control.Terminal.SelectionToolbar.Width");
+        var toolbarHeight = (double)FindResource("Control.Terminal.SelectionToolbar.Height");
         SelectionToolbarPopup.HorizontalOffset = Math.Clamp(e.Anchor.X, 0, Math.Max(0, Terminal.ActualWidth - toolbarWidth));
-        var preferredY = e.Anchor.Y >= toolbarHeight + 6 ? e.Anchor.Y - toolbarHeight - 6 : e.Anchor.Y + 6;
+        var toolbarOffset = (double)FindResource("Space.Terminal.SelectionToolbar.Offset");
+        var preferredY = e.Anchor.Y >= toolbarHeight + toolbarOffset ? e.Anchor.Y - toolbarHeight - toolbarOffset : e.Anchor.Y + toolbarOffset;
         SelectionToolbarPopup.VerticalOffset = Math.Clamp(preferredY, 0, Math.Max(0, Terminal.ActualHeight - toolbarHeight));
         SelectionToolbarPopup.IsOpen = true;
     }

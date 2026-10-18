@@ -47,11 +47,11 @@ public partial class ScriptRunInputsWindow : Window
         var label = new TextBlock
         {
             Text = definition is null ? $"参数 {_argumentRows.Count + 1}" : definition.Name,
-            Width = 150,
+            Width = (double)FindResource("Control.ScriptInput.LabelColumnWidth"),
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = (Brush)FindResource(definition is null ? "MutedBrush" : "SyntaxCyanBrush"),
-            FontFamily = new FontFamily("Cascadia Code"),
-            FontSize = 10,
+            Foreground = (Brush)FindResource(definition is null ? "Brush.Text.Secondary" : "Brush.Status.Info"),
+            FontFamily = (FontFamily)FindResource("Font.Mono"),
+            FontSize = (double)FindResource("Type.Size.Small"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = definition?.Name
         };
@@ -72,7 +72,7 @@ public partial class ScriptRunInputsWindow : Window
         var nameBox = CreateTextBox(name);
         nameBox.IsReadOnly = definition is not null;
         if (definition is not null)
-            nameBox.Foreground = (Brush)FindResource("SyntaxCyanBrush");
+            nameBox.Foreground = (Brush)FindResource("Brush.Status.Info");
         var valueControl = CreateValueControl(definition, value);
         var grid = CreateRowGrid();
         grid.Children.Add(nameBox);
@@ -96,10 +96,12 @@ public partial class ScriptRunInputsWindow : Window
         var header = new TextBlock
         {
             Text = $"// {group.ToUpperInvariant()}",
-            Foreground = (Brush)FindResource("SyntaxCyanBrush"),
-            FontFamily = new FontFamily("Cascadia Code"),
-            FontSize = 9,
-            Margin = new Thickness(0, panel.Children.Count == 0 ? 2 : 10, 0, 5)
+            Foreground = (Brush)FindResource("Brush.Status.Info"),
+            FontFamily = (FontFamily)FindResource("Font.Mono"),
+            FontSize = (double)FindResource("Type.Size.Label"),
+            Margin = (Thickness)FindResource(panel.Children.Count == 0
+                ? "Space.ScriptInput.GroupHeader.Margin.First"
+                : "Space.ScriptInput.GroupHeader.Margin.Next")
         };
         panel.Children.Add(header);
         lastGroup = group;
@@ -107,8 +109,8 @@ public partial class ScriptRunInputsWindow : Window
 
     private Grid CreateRowGrid()
     {
-        var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        var grid = new Grid { Margin = (Thickness)FindResource("Space.ScriptInput.Row.Margin") };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength((double)FindResource("Control.ScriptInput.LabelColumnWidth")) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         return grid;
@@ -148,20 +150,20 @@ public partial class ScriptRunInputsWindow : Window
         var passwordBox = new PasswordBox
         {
             Password = value,
-            Margin = new Thickness(0, 0, 6, 0),
-            Padding = new Thickness(6, 4, 6, 4),
-            Background = (Brush)FindResource("CanvasBrush"),
-            Foreground = (Brush)FindResource("TextBrush"),
-            BorderBrush = (Brush)FindResource("LineBrush"),
-            FontFamily = new FontFamily("Cascadia Code"),
-            FontSize = 10
+            Margin = (Thickness)FindResource("Space.Gap.Right.MD"),
+            Padding = (Thickness)FindResource("Space.Input.Padding"),
+            Background = (Brush)FindResource("Brush.Surface.Input"),
+            Foreground = (Brush)FindResource("Brush.Text.Primary"),
+            BorderBrush = (Brush)FindResource("Brush.Border.Subtle"),
+            FontFamily = (FontFamily)FindResource("Font.Mono"),
+            FontSize = (double)FindResource("Type.Size.Small")
         };
         var visibleBox = CreateTextBox(value);
         visibleBox.Visibility = Visibility.Collapsed;
         var overlay = new Grid();
         overlay.Children.Add(passwordBox);
         overlay.Children.Add(visibleBox);
-        var reveal = new CheckBox { Content = "显示", VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("MutedBrush"), FontSize = 9 };
+        var reveal = new CheckBox { Content = "显示", VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("Brush.Text.Secondary"), FontSize = (double)FindResource("Type.Size.Label") };
         reveal.Checked += (_, _) => { visibleBox.Text = passwordBox.Password; passwordBox.Visibility = Visibility.Collapsed; visibleBox.Visibility = Visibility.Visible; };
         reveal.Unchecked += (_, _) => { passwordBox.Password = visibleBox.Text; visibleBox.Visibility = Visibility.Collapsed; passwordBox.Visibility = Visibility.Visible; };
         Grid.SetColumn(reveal, 1);
@@ -173,14 +175,14 @@ public partial class ScriptRunInputsWindow : Window
     private TextBox CreateTextBox(string value) => new()
     {
         Text = value,
-        MinWidth = 100,
-        Margin = new Thickness(0, 0, 6, 0),
-        Padding = new Thickness(6, 4, 6, 4),
-        Background = (Brush)FindResource("CanvasBrush"),
-        Foreground = (Brush)FindResource("TextBrush"),
-        BorderBrush = (Brush)FindResource("LineBrush"),
-        FontFamily = new FontFamily("Cascadia Code"),
-        FontSize = 10
+        MinWidth = (double)FindResource("Control.ScriptInput.ValueMinWidth"),
+        Margin = (Thickness)FindResource("Space.Gap.Right.MD"),
+        Padding = (Thickness)FindResource("Space.Input.Padding"),
+        Background = (Brush)FindResource("Brush.Surface.Input"),
+        Foreground = (Brush)FindResource("Brush.Text.Primary"),
+        BorderBrush = (Brush)FindResource("Brush.Border.Subtle"),
+        FontFamily = (FontFamily)FindResource("Font.Mono"),
+        FontSize = (double)FindResource("Type.Size.Small")
     };
 
     private ComboBox CreateComboBox(IReadOnlyList<string> options, string value)
@@ -189,23 +191,23 @@ public partial class ScriptRunInputsWindow : Window
         {
             ItemsSource = options,
             SelectedItem = value,
-            MinWidth = 100,
-            Margin = new Thickness(0, 0, 6, 0),
-            Background = (Brush)FindResource("CanvasBrush"),
-            Foreground = (Brush)FindResource("TextBrush"),
-            BorderBrush = (Brush)FindResource("LineBrush"),
-            FontFamily = new FontFamily("Cascadia Code"),
-            FontSize = 10
+            MinWidth = (double)FindResource("Control.ScriptInput.ValueMinWidth"),
+            Margin = (Thickness)FindResource("Space.Gap.Right.MD"),
+            Background = (Brush)FindResource("Brush.Surface.Input"),
+            Foreground = (Brush)FindResource("Brush.Text.Primary"),
+            BorderBrush = (Brush)FindResource("Brush.Border.Subtle"),
+            FontFamily = (FontFamily)FindResource("Font.Mono"),
+            FontSize = (double)FindResource("Type.Size.Small")
         };
         return combo;
     }
 
-    private static void AddRemoveButton(Grid grid, Action remove)
+    private void AddRemoveButton(Grid grid, Action remove)
     {
         var button = new Button
         {
-            Content = "×", Width = 26, Padding = new Thickness(0),
-            Background = Brushes.Transparent, Foreground = Brushes.IndianRed,
+            Content = "×", Width = (double)FindResource("Control.ScriptInput.RemoveButtonWidth"), Padding = new Thickness(0),
+            Background = Brushes.Transparent, Foreground = (Brush)FindResource("Brush.Status.Error"),
             BorderBrush = Brushes.Transparent, ToolTip = "移除此项"
         };
         button.Click += (_, _) => remove();

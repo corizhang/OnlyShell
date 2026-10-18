@@ -2,16 +2,16 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OnlyShell / Sync" Width="430" SizeToContent="Height" WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize" Background="#19181D" Foreground="#E8E6EB" FontFamily="Segoe UI Variable Text">
-    <Border BorderBrush="#39363F" BorderThickness="1" Padding="18">
+        ResizeMode="NoResize" Background="{StaticResource Brush.Surface.Disabled}" Foreground="{StaticResource Brush.Text.HighEmphasis}" FontFamily="{StaticResource Font.Window}">
+    <Border BorderBrush="{StaticResource Brush.Border.Dialog}" BorderThickness="1" Padding="18">
         <StackPanel>
-            <TextBlock x:Name="PromptText" TextWrapping="Wrap" FontSize="12" LineHeight="20" />
-            <PasswordBox x:Name="SecretBox" Visibility="Collapsed" Margin="0,14,0,0" Padding="8,6" Background="#111015" Foreground="#E8E6EB" BorderBrush="#39363F" />
-            <PasswordBox x:Name="ConfirmBox" Visibility="Collapsed" Margin="0,8,0,0" Padding="8,6" Background="#111015" Foreground="#E8E6EB" BorderBrush="#39363F" />
-            <TextBlock x:Name="ValidationText" Foreground="#E68174" FontSize="10" Margin="0,6,0,0" />
+            <TextBlock x:Name="PromptText" TextWrapping="Wrap" FontSize="{StaticResource Type.Size.BodyLarge}" LineHeight="20" />
+            <PasswordBox x:Name="SecretBox" Visibility="Collapsed" Margin="0,14,0,0" Padding="8,6" Background="{StaticResource Brush.Surface.Input}" Foreground="{StaticResource Brush.Text.HighEmphasis}" BorderBrush="{StaticResource Brush.Border.Dialog}" />
+            <PasswordBox x:Name="ConfirmBox" Visibility="Collapsed" Margin="{StaticResource Space.Gap.Top.LG}" Padding="8,6" Background="{StaticResource Brush.Surface.Input}" Foreground="{StaticResource Brush.Text.HighEmphasis}" BorderBrush="{StaticResource Brush.Border.Dialog}" />
+            <TextBlock x:Name="ValidationText" Foreground="{StaticResource Brush.Status.Error}" FontSize="{StaticResource Type.Size.Small}" Margin="0,6,0,0" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                <Button Content="取消" MinWidth="76" Padding="10,5" Margin="0,0,8,0" IsCancel="True" />
-                <Button x:Name="AcceptButton" Content="已完成" MinWidth="84" Padding="10,5" IsDefault="True" Click="Accept_Click" Background="#E7A92E" Foreground="#17151A" BorderThickness="0" />
+                <Button Content="取消" MinWidth="76" Padding="10,5" Margin="{StaticResource Space.Gap.Right.LG}" IsCancel="True" />
+                <Button x:Name="AcceptButton" Content="已完成" MinWidth="84" Padding="10,5" IsDefault="True" Click="Accept_Click" Background="{StaticResource Brush.Accent.Hover}" Foreground="{StaticResource Brush.Text.OnAccent}" BorderThickness="0" />
             </StackPanel>
         </StackPanel>
     </Border>

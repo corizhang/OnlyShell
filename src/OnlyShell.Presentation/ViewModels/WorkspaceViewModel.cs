@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -70,6 +71,26 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private readonly DispatcherTimer _sftpConnectionMonitor;
     private IReadOnlyList<RemoteFileEntry> _selectedRemoteFiles = [];
     private IReadOnlyList<RemoteFileEntry> _selectedLocalFiles = [];
+
+    private static readonly string TerminalPreferencesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OnlyShell", "terminal-preferences.json");
+    private bool _loadingTerminalPreferences = true;
+
+    [ObservableProperty]
+    private string terminalFontFamily = "Cascadia Mono";
+
+    [ObservableProperty]
+    private double terminalFontSize = 14;
+
+    [ObservableProperty]
+    private int terminalScrollbackLines = 10000;
+
+    [ObservableProperty]
+    private bool confirmMultiLinePaste = true;
+
+    public IReadOnlyList<string> TerminalFontFamilies { get; } = ["Cascadia Mono", "Consolas", "NSimSun"];
+    public IReadOnlyList<double> TerminalFontSizes { get; } = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
+    public IReadOnlyList<int> TerminalScrollbackOptions { get; } = [1000, 5000, 10000, 25000, 50000];
 
     public ObservableCollection<HostProfile> Hosts { get; } = [];
     public ObservableCollection<TerminalTabViewModel> TerminalTabs { get; } = [];
@@ -257,7 +278,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         "SFTP" => "本地与远程双栏文件管理；选择文件后直接加入传输队列。",
         "同步" => "GitHub Device Flow · 私有仓库 · AES-GCM 加密主机配置同步。",
         "脚本" => "本机 PowerShell / CMD / Python 3，或远程 Bash / Python 3；执行结果和历史记录保存在本机。",
-        "设置" => "字体、主题、终端行为和本地数据设置将在设置页面阶段实现。",
+        "设置" => "调整终端外观与交互；更改会立即应用并保存在本机。",
         "传输" => "上传与下载任务队列将在 SFTP 功能阶段实现。",
         "历史" => "SSH 会话接入后会在此记录连接历史。",
         _ => "此工作区将在后续功能阶段实现。"
@@ -307,6 +328,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         _remoteScriptRunner = remoteScriptRunner;
         _localScriptRunner = localScriptRunner;
         _scriptCenterInteraction = scriptCenterInteraction;
+        LoadTerminalPreferences();
+        _loadingTerminalPreferences = false;
+        PropertyChanged += (_, args) =>
+        {
+            if (!_loadingTerminalPreferences && args.PropertyName is nameof(TerminalFontFamily)
+                or nameof(TerminalFontSize) or nameof(TerminalScrollbackLines) or nameof(ConfirmMultiLinePaste))
+                SaveTerminalPreferences();
+        };
         SyncOwner = _gitHubSync.SavedOwner ?? string.Empty;
         SyncRepository = _gitHubSync.SavedRepository ?? string.Empty;
         SyncBranch = _gitHubSync.SavedBranch ?? "main";
@@ -356,6 +385,46 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         ScriptsView = CollectionViewSource.GetDefaultView(Scripts);
         ScriptsView.Filter = FilterScript;
     }
+
+    private void LoadTerminalPreferences()
+    {
+        try
+        {
+            if (!File.Exists(TerminalPreferencesPath))
+                return;
+            var saved = JsonSerializer.Deserialize<TerminalPreferences>(File.ReadAllText(TerminalPreferencesPath));
+            if (saved is null)
+                return;
+
+            TerminalFontFamily = TerminalFontFamilies.Contains(saved.FontFamily) ? saved.FontFamily : "Cascadia Mono";
+            TerminalFontSize = TerminalFontSizes.Contains(saved.FontSize) ? saved.FontSize : 14;
+            TerminalScrollbackLines = TerminalScrollbackOptions.Contains(saved.ScrollbackLines) ? saved.ScrollbackLines : 10000;
+            ConfirmMultiLinePaste = saved.ConfirmMultiLinePaste;
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not load terminal preferences: {exception}");
+        }
+    }
+
+    private void SaveTerminalPreferences()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(TerminalPreferencesPath)!;
+            Directory.CreateDirectory(directory);
+            var temporaryPath = TerminalPreferencesPath + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new TerminalPreferences(
+                TerminalFontFamily, TerminalFontSize, TerminalScrollbackLines, ConfirmMultiLinePaste)));
+            File.Move(temporaryPath, TerminalPreferencesPath, overwrite: true);
+        }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not save terminal preferences: {exception}");
+        }
+    }
+
+    private sealed record TerminalPreferences(string FontFamily, double FontSize, int ScrollbackLines, bool ConfirmMultiLinePaste);
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {

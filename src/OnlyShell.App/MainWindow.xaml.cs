@@ -107,7 +107,7 @@ public partial class MainWindow : Window
             ?? CreateScriptHighlighting(name);
     }
 
-    private static IHighlightingDefinition CreateScriptHighlighting(string name)
+    private IHighlightingDefinition CreateScriptHighlighting(string name)
     {
         var python = name.EndsWith("Python", StringComparison.Ordinal);
         var cmd = name.EndsWith("CMD", StringComparison.Ordinal);
@@ -129,11 +129,11 @@ public partial class MainWindow : Window
                 : string.Empty;
         var syntax = $"""
             <SyntaxDefinition name="{name}" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
-              <Color name="Comment" foreground="#6A9955" fontStyle="italic" />
-              <Color name="String" foreground="#CE9178" />
-              <Color name="Keyword" foreground="#C586C0" />
-              <Color name="Number" foreground="#B5CEA8" />
-              <Color name="Variable" foreground="#9CDCFE" />
+              <Color name="Comment" foreground="{GetSyntaxColor("Brush.Syntax.Comment")}" fontStyle="italic" />
+              <Color name="String" foreground="{GetSyntaxColor("Brush.Syntax.String")}" />
+              <Color name="Keyword" foreground="{GetSyntaxColor("Brush.Syntax.Keyword")}" />
+              <Color name="Number" foreground="{GetSyntaxColor("Brush.Syntax.Number")}" />
+              <Color name="Variable" foreground="{GetSyntaxColor("Brush.Syntax.Variable")}" />
               <RuleSet>
                 {commentRule}
                 <Span color="String" begin="&quot;" end="&quot;" />
@@ -149,6 +149,12 @@ public partial class MainWindow : Window
         var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
         HighlightingManager.Instance.RegisterHighlighting(name, [], definition);
         return definition;
+    }
+
+    private string GetSyntaxColor(string resourceKey)
+    {
+        var color = ((System.Windows.Media.SolidColorBrush)FindResource(resourceKey)).Color;
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 
     private void TerminalTabs_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
