@@ -3,6 +3,35 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vt="clr-namespace:VirtualTerminal;assembly=VirtualTerminal.WPF"
              MinWidth="0" MinHeight="0">
+    <UserControl.Resources>
+        <Style x:Key="GitMenuItemButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="FontFamily" Value="{StaticResource Font.UI}" />
+            <Setter Property="FontSize" Value="{StaticResource Type.Size.Small}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ItemBackground" Background="{TemplateBinding Background}" CornerRadius="3">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="{StaticResource Brush.Surface.Hover}" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
     <Grid Background="{StaticResource Brush.Surface.Terminal}">
         <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <DockPanel Background="{StaticResource Brush.Surface}" LastChildFill="False">
@@ -11,7 +40,12 @@
             <TextBlock Text="{Binding ProtocolLabel}" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" />
             <TextBlock Text="  ·  " Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Status}" Foreground="{DynamicResource Brush.Status.Success}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" />
+            <TextBlock Text="  ·  " Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" Visibility="{Binding IsGitRepository, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <TextBlock Text="{Binding GitContextLabel}" ToolTip="{Binding GitWorkingDirectory}" Foreground="{DynamicResource Brush.Status.Warning}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" Visibility="{Binding IsGitRepository, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="[ PULL ]" Tag="git pull --ff-only" Click="GitCommand_Click" IsEnabled="{Binding IsConnected}" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" ToolTip="在当前终端目录执行 git pull --ff-only" />
+                <Button Content="[ PUSH ]" Tag="git push" Click="GitCommand_Click" IsEnabled="{Binding IsConnected}" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" ToolTip="在当前终端目录执行 git push" />
+                <Button x:Name="GitMenuButton" Content="[ GIT ▾ ]" Click="GitMenuButton_Click" IsEnabled="{Binding IsConnected}" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" ToolTip="更多 Git 操作；命令发送到当前终端" />
                 <Button Content="[ QUICK CMD ]" Click="QuickCommands_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" ToolTip="管理并插入快捷命令；不会自动执行" />
                 <Button Content="[ FIND / CTRL+F ]" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" ToolTip="搜索当前终端屏幕和滚屏缓冲区；按 Enter 查找下一个" />
                 <Button Content="[ REOPEN ]" Command="{Binding DataContext.ReconnectTerminalCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" IsEnabled="{Binding CanReconnect}" Background="Transparent" Foreground="{DynamicResource Brush.Accent.Primary}" BorderThickness="0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Padding="8,2" />
@@ -50,5 +84,32 @@
         <Border Grid.Row="2" Visibility="{Binding IsSessionMissing, Converter={StaticResource BooleanToVisibilityConverter}}" Background="{StaticResource Brush.Surface.Terminal}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="// SESSION_RESTORED / NOT_CONNECTED" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}" HorizontalAlignment="Center"/><TextBlock Text="点击上方 REOPEN 重新建立终端会话。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.LG}"/></StackPanel>
         </Border>
+        <Popup x:Name="GitMenuPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{StaticResource Brush.Surface.TerminalPopup}" BorderBrush="{StaticResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="5" Padding="5">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="4" Opacity="0.45" />
+                </Border.Effect>
+                <StackPanel MinWidth="232">
+                    <TextBlock Text="GIT  /  当前终端" Foreground="{StaticResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" Margin="10,7,10,6" />
+                    <Border Height="1" Background="{StaticResource Brush.Border.Subtle}" Margin="4,0,4,4" />
+                    <Button Content="查看工作区状态" Tag="git status --short --branch" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="查看当前分支" Tag="git branch --show-current" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Border Height="1" Background="{StaticResource Brush.Border.Subtle}" Margin="4,4" />
+                    <Button Content="暂存全部改动" Tag="stage-all" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="取消全部暂存" Tag="unstage-all" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="提交已暂存内容…" Tag="commit" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Border Height="1" Background="{StaticResource Brush.Border.Subtle}" Margin="4,4" />
+                    <Button Content="新建并切换分支…" Tag="branch-create" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="切换分支…" Tag="branch-switch" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Border Height="1" Background="{StaticResource Brush.Border.Subtle}" Margin="4,4" />
+                    <Button Content="获取远程更新" Tag="git fetch --prune" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="查看最近提交" Tag="git log -10 --oneline --decorate" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="查看差异统计" Tag="git diff --stat" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="暂存到 stash" Tag="stash-save" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <Button Content="恢复最近的 stash" Tag="stash-pop" Click="GitCommand_Click" Style="{StaticResource GitMenuItemButtonStyle}" />
+                    <TextBlock Text="命令会在终端中执行并显示输出" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Caption}" Margin="10,7,10,5" />
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

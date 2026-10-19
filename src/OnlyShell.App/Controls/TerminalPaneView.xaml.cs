@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Text;
+using System.Text.RegularExpressions;
 using OnlyShell.Presentation.ViewModels;
 
 namespace OnlyShell.App.Controls;
@@ -15,6 +17,7 @@ public partial class TerminalPaneView : UserControl
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
         Terminal.SelectionStateChanged += Terminal_SelectionStateChanged;
+        Terminal.TitleChanged += Terminal_TitleChanged;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -42,6 +45,94 @@ public partial class TerminalPaneView : UserControl
     private void OpenSearch_Click(object sender, RoutedEventArgs e) => OpenSearch();
 
     private void TerminalContextFind_Click(object sender, RoutedEventArgs e) => OpenSearch();
+
+    private void GitMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button)
+            return;
+
+        GitMenuPopup.PlacementTarget = button;
+        GitMenuPopup.IsOpen = true;
+    }
+
+    private void Terminal_TitleChanged(object? sender, string title)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => Terminal_TitleChanged(sender, title));
+            return;
+        }
+
+        if (DataContext is TerminalTabViewModel terminalTab)
+            terminalTab.UpdateGitContextFromTerminalTitle(title);
+    }
+
+    private void GitCommand_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not TerminalTabViewModel { IsConnected: true, Session: { } session } terminalTab
+            || sender is not FrameworkElement { Tag: string commandKey }
+            || string.IsNullOrWhiteSpace(commandKey))
+            return;
+
+        var command = BuildGitCommand(commandKey, terminalTab);
+        if (command is null)
+            return;
+
+        session.Write(session.InputEncoding.GetBytes(command + "\r"));
+        GitMenuPopup.IsOpen = false;
+        Terminal.Focus();
+    }
+
+    private string? BuildGitCommand(string key, TerminalTabViewModel terminalTab)
+    {
+        return key switch
+        {
+            "stage-all" => "git add -A :/",
+            "unstage-all" => "git reset HEAD -- :/",
+            "stash-save" => "git stash push -u",
+            "stash-pop" => "git stash pop",
+            "commit" => PromptForValue("提交", "提交说明", terminalTab.Kind == TerminalSessionKind.Local && terminalTab.LocalShellId == "cmd"
+                ? ValidateCmdCommitMessage : null) is { } message
+                ? $"git commit -m {QuoteForShell(message, terminalTab)}" : null,
+            "branch-create" => PromptForValue("新建分支", "新分支名称", ValidateBranchName) is { } newBranch
+                ? $"git switch -c {QuoteForShell(newBranch, terminalTab)}" : null,
+            "branch-switch" => PromptForValue("切换分支", "目标分支名称", ValidateBranchName) is { } branch
+                ? $"git switch {QuoteForShell(branch, terminalTab)}" : null,
+            _ => key
+        };
+    }
+
+    private string? PromptForValue(string title, string prompt, Func<string, string?>? validate = null)
+    {
+        var dialog = new GitInputWindow(title, prompt, validate: validate) { Owner = Window.GetWindow(this) };
+        return dialog.ShowDialog() == true ? dialog.Value : null;
+    }
+
+    private static string? ValidateBranchName(string branch)
+    {
+        if (!Regex.IsMatch(branch, @"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+            || branch.Contains("..", StringComparison.Ordinal)
+            || branch.Contains("//", StringComparison.Ordinal)
+            || branch.EndsWith(".lock", StringComparison.OrdinalIgnoreCase)
+            || branch.EndsWith('/')
+            || branch.EndsWith('.'))
+            return "分支名仅支持字母、数字、点、下划线、斜杠和连字符，且不能以点或斜杠结尾。";
+        return null;
+    }
+
+    private static string? ValidateCmdCommitMessage(string message) =>
+        message.IndexOfAny(['%', '!', '"', '\r', '\n']) >= 0
+            ? "CMD 的提交说明不能包含 %、!、双引号或换行符。"
+            : null;
+
+    private static string QuoteForShell(string value, TerminalTabViewModel terminalTab)
+    {
+        if (terminalTab.Kind == TerminalSessionKind.Local && terminalTab.LocalShellId is "pwsh" or "powershell")
+            return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        if (terminalTab.Kind == TerminalSessionKind.Local && terminalTab.LocalShellId == "cmd")
+            return "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+        return "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+    }
 
     private void Terminal_SelectionStateChanged(object? sender, VirtualTerminal.TerminalSelectionStateEventArgs e)
     {

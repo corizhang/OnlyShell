@@ -1,6 +1,7 @@
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
 using System.Windows.Media;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OnlyShell.Core.Hosts;
 using OnlyShell.Terminal;
@@ -37,6 +38,7 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
         ? $"LOCAL // {Environment.UserName}"
         : Host is null ? "SSH // RESTORED SESSION" : $"{Host.UserName}@{Host.HostName}:{Host.Port}";
     public string ProtocolLabel => Kind == TerminalSessionKind.New ? "SSH / QUICK CONNECT" : Kind == TerminalSessionKind.Local ? "LOCAL / CONPTY / UTF-8" : "SSH / UTF-8 / XTERM";
+    public string GitContextLabel => !IsGitRepository ? string.Empty : $"GIT // {GitBranch}{(GitHasChanges ? " *" : string.Empty)}";
     public bool IsNewTab => Kind == TerminalSessionKind.New;
     public string LocalShellLabel => LocalShellId switch
     {
@@ -99,6 +101,47 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
 
     [ObservableProperty]
     private string status = "DISCONNECTED";
+
+    [ObservableProperty]
+    private string gitWorkingDirectory = string.Empty;
+
+    [ObservableProperty]
+    private string gitBranch = string.Empty;
+
+    [ObservableProperty]
+    private bool gitHasChanges;
+
+    public bool IsGitRepository => !string.IsNullOrWhiteSpace(GitBranch);
+
+    partial void OnGitBranchChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsGitRepository));
+        OnPropertyChanged(nameof(GitContextLabel));
+    }
+
+    partial void OnGitHasChangesChanged(bool value) => OnPropertyChanged(nameof(GitContextLabel));
+
+    public void UpdateGitContextFromTerminalTitle(string title)
+    {
+        const string prefix = "OnlyShellGit|";
+        if (!title.StartsWith(prefix, StringComparison.Ordinal))
+            return;
+
+        var parts = title[prefix.Length..].Split('|');
+        if (parts.Length != 3)
+            return;
+
+        try
+        {
+            GitWorkingDirectory = Encoding.UTF8.GetString(Convert.FromBase64String(parts[0]));
+            GitBranch = parts[1];
+            GitHasChanges = parts[2] == "1";
+        }
+        catch (FormatException)
+        {
+            // Ignore malformed or unrelated terminal title updates.
+        }
+    }
 
     [ObservableProperty]
     private ITerminalSession? session;
