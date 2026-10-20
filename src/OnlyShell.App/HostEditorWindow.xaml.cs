@@ -9,18 +9,22 @@ namespace OnlyShell.App;
 public partial class HostEditorWindow : Window
 {
     private readonly HostProfile? _current;
+    private readonly IReadOnlyList<string> _existingGroups;
+    private string _groupPath = "";
 
     public HostProfile? Result { get; private set; }
 
-    public HostEditorWindow(HostProfile? current)
+    public HostEditorWindow(HostProfile? current, IReadOnlyList<string>? existingGroups = null)
     {
         InitializeComponent();
         _current = current;
+        _existingGroups = existingGroups ?? [];
 
         if (current is null)
         {
             PortBox.Text = "22";
-            GroupBox.Text = "未分组";
+            _groupPath = "未分组";
+            UpdateGroupDisplay();
             return;
         }
 
@@ -29,7 +33,8 @@ public partial class HostEditorWindow : Window
         HostBox.Text = current.HostName;
         PortBox.Text = current.Port.ToString();
         UserBox.Text = current.UserName;
-        GroupBox.Text = current.Group ?? string.Empty;
+        _groupPath = current.Group ?? string.Empty;
+        UpdateGroupDisplay();
         NoteBox.Text = current.Note ?? string.Empty;
         AuthenticationBox.SelectedIndex = current.AuthenticationMethod == SshAuthenticationMethod.PrivateKey ? 1 : 0;
         PrivateKeyPathBox.Text = current.PrivateKeyPath ?? string.Empty;
@@ -69,7 +74,7 @@ public partial class HostEditorWindow : Window
             HostBox.Text.Trim(),
             port,
             UserBox.Text.Trim(),
-            string.IsNullOrWhiteSpace(GroupBox.Text) ? null : GroupBox.Text.Trim(),
+            string.IsNullOrWhiteSpace(_groupPath) ? null : NormalizeGroupPath(_groupPath),
             _current?.CredentialReference,
             _current?.LastConnectedAt,
             _current?.IsFavorite ?? false,
@@ -103,4 +108,28 @@ public partial class HostEditorWindow : Window
         if (dialog.ShowDialog(this) == true)
             PrivateKeyPathBox.Text = dialog.FileName;
     }
+
+    private void ChooseGroup_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new FolderPickerWindow(_existingGroups, _groupPath) { Owner = this };
+            if (picker.ShowDialog() == true)
+            {
+                _groupPath = picker.SelectedPath;
+                UpdateGroupDisplay();
+            }
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("FOLDER_PICKER", "Could not choose a host group.", exception);
+            MessageBox.Show(this, $"分组选择失败：{exception.Message}", "OnlyShell / Folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void UpdateGroupDisplay() => GroupPathText.Text = string.IsNullOrWhiteSpace(_groupPath) ? "/ (未分组)" : $"/ {_groupPath}";
+
+    private static string NormalizeGroupPath(string path) => string.Join('/',
+        path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(segment => segment is not "." and not ".."));
 }

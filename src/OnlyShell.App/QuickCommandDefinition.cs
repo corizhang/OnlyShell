@@ -7,6 +7,7 @@ public sealed record QuickCommandDefinition(
     string Command,
     string Description)
 {
+    public string FolderPath { get; init; } = "";
     public List<QuickCommandVariable> Variables { get; init; } = [];
 }
 

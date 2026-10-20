@@ -68,6 +68,7 @@ public interface IScriptCenterStore
     Task DeleteScriptAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ScriptRunLog>> LoadRecentRunsAsync(int count, CancellationToken cancellationToken = default);
     Task AppendRunAsync(ScriptRunLog run, CancellationToken cancellationToken = default);
+    Task DeleteRunAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
 public interface IScriptExecutionInputsStore

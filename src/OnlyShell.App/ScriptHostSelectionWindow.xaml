@@ -3,20 +3,20 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="选择脚本目标主机" Width="520" Height="560" MinWidth="{StaticResource Dialog.MinWidth.Compact}" MinHeight="360"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="{StaticResource Brush.Canvas}" Foreground="{StaticResource Brush.Text.Primary}">
+        Background="{DynamicResource Brush.Canvas}" Foreground="{DynamicResource Brush.Text.Primary}">
     <Grid Margin="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel Margin="0,0,0,10">
-            <TextBlock Text="// BATCH_SCRIPT_TARGETS" Foreground="{StaticResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}"/>
-            <TextBlock Text="脚本将按列表顺序逐台执行。每台主机分别记录结果；某台失败不会阻止后续主机。" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Small}" TextWrapping="Wrap" Margin="{StaticResource Space.Gap.Top.MD}"/>
+            <TextBlock Text="// BATCH_SCRIPT_TARGETS" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}"/>
+            <TextBlock Text="脚本将按列表顺序逐台执行。每台主机分别记录结果；某台失败不会阻止后续主机。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Small}" TextWrapping="Wrap" Margin="{StaticResource Space.Gap.Top.MD}"/>
         </StackPanel>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <ItemsControl x:Name="HostsPanel">
                 <ItemsControl.ItemTemplate><DataTemplate>
-                    <Border BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="0,0,0,1" Padding="8,6">
+                    <Border BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="0,0,0,1" Padding="8,6">
                         <StackPanel>
-                            <CheckBox IsChecked="{Binding IsSelected}" Checked="HostSelectionChanged" Unchecked="HostSelectionChanged" Content="{Binding Host.Name}" Foreground="{StaticResource Brush.Text.Primary}"/>
-                            <TextBlock Text="{Binding Endpoint}" Foreground="{StaticResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Label}" Margin="22,2,0,0"/>
+                            <CheckBox IsChecked="{Binding IsSelected}" Checked="HostSelectionChanged" Unchecked="HostSelectionChanged" Content="{Binding Host.Name}" Foreground="{DynamicResource Brush.Text.Primary}"/>
+                            <TextBlock Text="{Binding Endpoint}" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Margin="22,2,0,0"/>
                         </StackPanel>
                     </Border>
                 </DataTemplate></ItemsControl.ItemTemplate>
@@ -24,9 +24,9 @@
         </ScrollViewer>
         <Grid Grid.Row="2" Margin="0,12,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBlock x:Name="SelectionCount" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Content="CANCEL" IsCancel="True" MinWidth="86" Margin="{StaticResource Space.Gap.Right.LG}" Padding="{StaticResource Space.Button.Padding}" Background="Transparent" Foreground="{StaticResource Brush.Text.Secondary}" BorderBrush="{StaticResource Brush.Border.Subtle}"/>
-            <Button Grid.Column="2" Content="NEXT" IsDefault="True" Click="Continue_Click" MinWidth="86" Padding="{StaticResource Space.Button.Padding}" Background="{StaticResource Brush.Accent.Primary}" Foreground="{StaticResource Brush.Text.OnAccent}" BorderThickness="0"/>
+            <TextBlock x:Name="SelectionCount" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Label}" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="CANCEL" IsCancel="True" MinWidth="86" Margin="{StaticResource Space.Gap.Right.LG}" Padding="{StaticResource Space.Button.Padding}" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/>
+            <Button Grid.Column="2" Content="NEXT" IsDefault="True" Click="Continue_Click" MinWidth="86" Padding="{StaticResource Space.Button.Padding}" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0"/>
         </Grid>
     </Grid>
 </Window>

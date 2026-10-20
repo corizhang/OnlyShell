@@ -2,71 +2,71 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              MinWidth="0">
-    <Border Background="{StaticResource Brush.Surface.Input}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="8">
+    <Border Background="{DynamicResource Brush.Surface.Input}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="8">
         <StackPanel>
             <DockPanel LastChildFill="False" Margin="{StaticResource Space.Gap.Bottom.SM}">
-                <TextBlock Text="// SERVER_MONITOR" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <TextBlock Text="{Binding MetricsStatus}" Foreground="{DynamicResource Brush.Status.Success}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" DockPanel.Dock="Right" />
+                <TextBlock Text="// SERVER_MONITOR" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <TextBlock Text="{Binding MetricsStatus}" Foreground="{DynamicResource Brush.Status.Success}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" DockPanel.Dock="Right" />
             </DockPanel>
-            <TextBlock Text="{Binding MetricsHostLabel}" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding MetricsHostLabel}" Margin="{StaticResource Space.Gap.Bottom.LG}" />
+            <TextBlock Text="{Binding MetricsHostLabel}" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding MetricsHostLabel}" Margin="{StaticResource Space.Gap.Bottom.LG}" />
             <DockPanel LastChildFill="False" Margin="{StaticResource Space.Gap.Bottom.MD}">
-                <TextBlock Text="{Binding MetricsAlertText}" Foreground="{Binding MetricsAlertBrush}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding MetricsAlertText}" Foreground="{Binding MetricsAlertBrush}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" VerticalAlignment="Center" />
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                    <TextBlock Text="WARN ≥" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" VerticalAlignment="Center" />
-                    <TextBox Text="{Binding MonitorWarningThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="25" Height="16" Padding="1,0" Margin="3,0,1,0" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" TextAlignment="Center" ToolTip="CPU / memory / disk warning threshold (1–100%)" />
-                    <TextBlock Text="%" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" VerticalAlignment="Center" />
+                    <TextBlock Text="WARN ≥" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding MonitorWarningThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="25" Height="16" Padding="1,0" Margin="3,0,1,0" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" TextAlignment="Center" ToolTip="CPU / memory / disk warning threshold (1–100%)" />
+                    <TextBlock Text="%" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" VerticalAlignment="Center" />
                 </StackPanel>
             </DockPanel>
 
             <Grid Margin="{StaticResource Space.Gap.Bottom.MD}">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="CPU" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <TextBlock Grid.Column="1" Text="{Binding CpuMetricText}" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding CpuProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{StaticResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Accent.Primary}" BorderThickness="0" />
+                <TextBlock Text="CPU" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <TextBlock Grid.Column="1" Text="{Binding CpuMetricText}" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding CpuProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{DynamicResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Accent.Primary}" BorderThickness="0" />
             </Grid>
             <Grid Margin="{StaticResource Space.Gap.Bottom.MD}">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="MEMORY" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <TextBlock Grid.Column="1" Text="{Binding MemoryMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding MemoryProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{StaticResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" />
+                <TextBlock Text="MEMORY" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <TextBlock Grid.Column="1" Text="{Binding MemoryMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding MemoryProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{DynamicResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Status.Info}" BorderThickness="0" />
             </Grid>
             <Grid Margin="{StaticResource Space.Gap.Bottom.MD}">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="SWAP" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <TextBlock Grid.Column="1" Text="{Binding SwapMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding SwapProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{StaticResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Accent.Primary}" BorderThickness="0" />
+                <TextBlock Text="SWAP" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <TextBlock Grid.Column="1" Text="{Binding SwapMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding SwapProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{DynamicResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Accent.Primary}" BorderThickness="0" />
             </Grid>
             <Grid Margin="{StaticResource Space.Gap.Bottom.MD}">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="ROOT DISK" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <TextBlock Grid.Column="1" Text="{Binding DiskMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}" />
-                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding DiskProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{StaticResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Status.Success}" BorderThickness="0" />
+                <TextBlock Text="ROOT DISK" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <TextBlock Grid.Column="1" Text="{Binding DiskMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" />
+                <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Value="{Binding DiskProgress, Mode=OneWay}" Maximum="100" Height="4" Margin="{StaticResource Space.Gap.Top.MD}" Background="{DynamicResource Brush.Surface.MetricTrack}" Foreground="{DynamicResource Brush.Status.Success}" BorderThickness="0" />
             </Grid>
 
             <Border Height="1" Background="{DynamicResource Brush.Border.Subtle}" Margin="0,1,0,6" />
-            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="LOAD / 1·5·15M" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding LoadMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}"/></Grid>
-            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="UPTIME / PROCS" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding UptimeProcessMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Caption}"/></Grid>
-            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="NETWORK RX / TX" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding NetworkMetricText}" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/></Grid>
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="SSH RTT" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding SshRoundTripText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}"/></Grid>
-            <Border Background="{StaticResource Brush.Surface.Metric}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Margin="0,7,0,0" Padding="4,3,4,2">
+            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="LOAD / 1·5·15M" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding LoadMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}"/></Grid>
+            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="UPTIME / PROCS" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding UptimeProcessMetricText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}"/></Grid>
+            <Grid Margin="{StaticResource Space.Gap.Bottom.XS}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="NETWORK RX / TX" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding NetworkMetricText}" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/></Grid>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="SSH RTT" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/><TextBlock Grid.Column="1" Text="{Binding SshRoundTripText}" Foreground="{DynamicResource Brush.Text.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}"/></Grid>
+            <Border Background="{DynamicResource Brush.Surface.Metric}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Margin="0,7,0,0" Padding="4,3,4,2">
                 <StackPanel>
                     <DockPanel LastChildFill="False" Margin="0,0,0,2">
-                        <TextBlock Text="TREND / 3M" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" />
+                        <TextBlock Text="TREND / 3M" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" />
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                            <TextBlock Text="CPU" Foreground="{StaticResource Brush.Status.WarningBright}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
-                            <TextBlock Text="MEM" Foreground="{StaticResource Brush.Status.InfoBright}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
-                            <TextBlock Text="DISK" Foreground="{StaticResource Brush.Status.SuccessBright}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
-                            <TextBlock Text="NET" Foreground="{StaticResource Brush.Accent.Purple}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.MetricTiny}" />
+                            <TextBlock Text="CPU" Foreground="{DynamicResource Brush.Status.WarningBright}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
+                            <TextBlock Text="MEM" Foreground="{DynamicResource Brush.Status.InfoBright}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
+                            <TextBlock Text="DISK" Foreground="{DynamicResource Brush.Status.SuccessBright}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.MetricTiny}" Margin="{StaticResource Space.Gap.Right.SM}" />
+                            <TextBlock Text="NET" Foreground="{DynamicResource Brush.Accent.Purple}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.MetricTiny}" />
                         </StackPanel>
                     </DockPanel>
                     <Canvas x:Name="TrendCanvas" Height="42" ClipToBounds="True" />
                 </StackPanel>
             </Border>
-            <TextBlock Text="{Binding MetricsUpdatedText, StringFormat='UPDATED {0}'}" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Tiny}" Margin="0,6,0,0" />
+            <TextBlock Text="{Binding MetricsUpdatedText, StringFormat='UPDATED {0}'}" Foreground="{DynamicResource Brush.Text.Secondary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Tiny}" Margin="0,6,0,0" />
         </StackPanel>
     </Border>
 </UserControl>

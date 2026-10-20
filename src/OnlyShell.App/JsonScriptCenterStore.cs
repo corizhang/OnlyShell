@@ -65,6 +65,18 @@ public sealed class JsonScriptCenterStore : IScriptCenterStore
         finally { _gate.Release(); }
     }
 
+    public async Task DeleteRunAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var runs = await ReadFileAsync<ScriptRunLog>(RunsPath, cancellationToken);
+            runs.RemoveAll(item => item.Id == id);
+            await WriteFileAsync(RunsPath, runs, cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task<IReadOnlyList<T>> ReadAsync<T>(string path, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);

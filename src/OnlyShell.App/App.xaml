@@ -12,13 +12,13 @@
 
             <!-- Keep the native WPF table controls aligned with OnlyShell's dark palette. -->
             <Style TargetType="GridViewColumnHeader">
-                <Setter Property="Background" Value="{StaticResource Brush.Surface.Raised}" />
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Header}" />
-                <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Subtle}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Surface.Raised}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Header}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Subtle}" />
                 <Setter Property="BorderThickness" Value="0,0,1,1" />
                 <Setter Property="Padding" Value="{StaticResource Space.HeaderPadding}" />
-                <Setter Property="FontFamily" Value="{StaticResource Font.Mono}" />
-                <Setter Property="FontSize" Value="{StaticResource Type.Size.Label}" />
+                <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+                <Setter Property="FontSize" Value="{DynamicResource Type.Size.Label}" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Template">
                     <Setter.Value>
@@ -30,15 +30,15 @@
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></Trigger>
-                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{StaticResource Brush.Accent.Primary}"/></Trigger>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Accent.Primary}"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
             <Style TargetType="ListViewItem">
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="1" />
@@ -51,23 +51,23 @@
                                 <GridViewRowPresenter Content="{TemplateBinding Content}" Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}" VerticalAlignment="Center" />
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></Trigger>
-                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}"/><Setter TargetName="RowSurface" Property="BorderBrush" Value="{StaticResource Brush.Border.Selected}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.OnSelected}"/></Trigger>
-                                <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions><Setter TargetName="RowSurface" Property="Background" Value="{StaticResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></MultiTrigger>
-                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{StaticResource Brush.Text.Disabled}"/></Trigger>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></Trigger>
+                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/><Setter TargetName="RowSurface" Property="BorderBrush" Value="{DynamicResource Brush.Border.Selected}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnSelected}"/></Trigger>
+                                <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions><Setter TargetName="RowSurface" Property="Background" Value="{DynamicResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></MultiTrigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Disabled}"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
             <Style TargetType="DataGridColumnHeader">
-                <Setter Property="Background" Value="{StaticResource Brush.Surface.Raised}" />
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Header}" />
-                <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Subtle}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Surface.Raised}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Header}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Subtle}" />
                 <Setter Property="BorderThickness" Value="0,0,1,1" />
                 <Setter Property="Padding" Value="{StaticResource Space.HeaderPadding}" />
-                <Setter Property="FontFamily" Value="{StaticResource Font.Mono}" />
-                <Setter Property="FontSize" Value="{StaticResource Type.Size.Label}" />
+                <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+                <Setter Property="FontSize" Value="{DynamicResource Type.Size.Label}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="DataGridColumnHeader">
@@ -75,23 +75,23 @@
                                 <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></Trigger>
-                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{StaticResource Brush.Accent.Primary}"/></Trigger>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Accent.Primary}"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
             <Style TargetType="DataGridRow">
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                <Setter Property="Background" Value="{StaticResource Brush.Surface}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Surface}" />
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="SnapsToDevicePixels" Value="True" />
                 <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></Trigger>
-                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.OnSelected}"/><Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Selected}"/></Trigger>
-                    <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions><Setter Property="Background" Value="{StaticResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></MultiTrigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnSelected}"/><Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Selected}"/></Trigger>
+                    <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions><Setter Property="Background" Value="{DynamicResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></MultiTrigger>
                 </Style.Triggers>
             </Style>
             <Style TargetType="DataGridCell">
@@ -102,13 +102,13 @@
                 <Setter Property="Padding" Value="6,3" />
                 <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                 <Style.Triggers>
-                    <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/><Setter Property="Background" Value="Transparent"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/><Setter Property="Background" Value="Transparent"/></Trigger>
                 </Style.Triggers>
             </Style>
             <Style TargetType="TabItem">
-                <Setter Property="Background" Value="{StaticResource Brush.Canvas}" />
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
-                <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Subtle}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Canvas}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Subtle}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="{StaticResource Space.Tab.Padding}" />
                 <Setter Property="Margin" Value="{StaticResource Space.Tab.Margin}" />
@@ -127,32 +127,108 @@
                                             <RowDefinition Height="{StaticResource Control.Tab.ActiveIndicatorRowHeight}" />
                                             <RowDefinition Height="*" />
                                         </Grid.RowDefinitions>
-                                        <Border x:Name="ActiveIndicator" Grid.Row="0" Background="{StaticResource Brush.Accent.Primary}" Opacity="0" />
+                                        <Border x:Name="ActiveIndicator" Grid.Row="0" Background="{DynamicResource Brush.Accent.Primary}" Opacity="0" />
                                         <ContentPresenter Grid.Row="1" ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
                                     </Grid>
                                 </Border>
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="TabSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}" />
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                                    <Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="TabSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
-                                    <Setter TargetName="TabSurface" Property="BorderBrush" Value="{StaticResource Brush.Border.Selected}" />
+                                    <Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                    <Setter TargetName="TabSurface" Property="BorderBrush" Value="{DynamicResource Brush.Border.Selected}" />
                                     <Setter TargetName="ActiveIndicator" Property="Opacity" Value="1" />
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.OnSelected}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnSelected}" />
                                 </Trigger>
                                 <MultiTrigger>
                                     <MultiTrigger.Conditions>
                                         <Condition Property="IsSelected" Value="True" />
                                         <Condition Property="IsMouseOver" Value="True" />
                                     </MultiTrigger.Conditions>
-                                    <Setter TargetName="TabSurface" Property="Background" Value="{StaticResource Brush.Surface.SelectedHover}" />
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}" />
+                                    <Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource Brush.Surface.SelectedHover}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}" />
                                 </MultiTrigger>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Disabled}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Disabled}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- Shared OnlyShell scrollbar: quiet track, compact rounded thumb, accent on interaction. -->
+            <Style TargetType="ScrollBar">
+                <Setter Property="Width" Value="{StaticResource Control.ScrollBarThickness}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Accent.Primary}" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent" SnapsToDevicePixels="True">
+                                <Track x:Name="PART_Track"
+                                       Orientation="{TemplateBinding Orientation}"
+                                       Minimum="{TemplateBinding Minimum}"
+                                       Maximum="{TemplateBinding Maximum}"
+                                       Value="{TemplateBinding Value}"
+                                       ViewportSize="{TemplateBinding ViewportSize}">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Focusable="False" IsTabStop="False" Opacity="0" />
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb x:Name="Thumb" Background="{DynamicResource Brush.Accent.Primary}" Opacity="0.78">
+                                            <Thumb.Style>
+                                                <Style TargetType="Thumb">
+                                                    <Setter Property="MinWidth" Value="0" />
+                                                    <Setter Property="MinHeight" Value="0" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="Vertical">
+                                                            <Setter Property="MinHeight" Value="22" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="Horizontal">
+                                                            <Setter Property="MinWidth" Value="22" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Thumb.Style>
+                                            <Thumb.Template>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border x:Name="ThumbSurface" Background="{TemplateBinding Background}" CornerRadius="2" Margin="2,2" SnapsToDevicePixels="True" />
+                                                    <ControlTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="Horizontal">
+                                                            <Setter TargetName="ThumbSurface" Property="Margin" Value="2,2" />
+                                                        </DataTrigger>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="ThumbSurface" Property="Opacity" Value="0.92" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsDragging" Value="True">
+                                                            <Setter TargetName="ThumbSurface" Property="Opacity" Value="1" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter TargetName="ThumbSurface" Property="Opacity" Value="0.35" />
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Thumb.Template>
+                                        </Thumb>
+                                    </Track.Thumb>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Focusable="False" IsTabStop="False" Opacity="0" />
+                                    </Track.IncreaseRepeatButton>
+                                </Track>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="Orientation" Value="Horizontal">
+                                    <Setter Property="Width" Value="Auto" />
+                                    <Setter Property="Height" Value="{StaticResource Control.ScrollBarThickness}" />
+                                </Trigger>
+                                <Trigger Property="Orientation" Value="Vertical">
+                                    <Setter Property="Width" Value="{StaticResource Control.ScrollBarThickness}" />
+                                    <Setter Property="Height" Value="Auto" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -160,14 +236,14 @@
                 </Setter>
             </Style>
             <Style TargetType="ComboBox">
-                <Setter Property="Background" Value="{StaticResource Brush.Surface.Input}" />
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Default}" />
+                <Setter Property="Background" Value="{DynamicResource Brush.Surface.Input}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Padding" Value="{StaticResource Space.ComboPadding}" />
                 <Setter Property="MinHeight" Value="{StaticResource Control.RowHeight}" />
-                <Setter Property="FontFamily" Value="{StaticResource Font.Mono}" />
-                <Setter Property="FontSize" Value="{StaticResource Type.Size.Label}" />
+                <Setter Property="FontFamily" Value="{DynamicResource Font.Mono}" />
+                <Setter Property="FontSize" Value="{DynamicResource Type.Size.Label}" />
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
                 <Setter Property="Template">
@@ -179,20 +255,20 @@
                                     <ToggleButton.Template>
                                         <ControlTemplate TargetType="ToggleButton">
                                             <Grid Background="Transparent">
-                                                <Border x:Name="ArrowSurface" Width="23" HorizontalAlignment="Right" Background="Transparent" BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1,0,0,0">
-                                                    <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="{StaticResource Brush.Icon.Muted}" Width="8" Height="4" Stretch="Fill" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <Border x:Name="ArrowSurface" Width="23" HorizontalAlignment="Right" Background="Transparent" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1,0,0,0">
+                                                    <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource Brush.Icon.Muted}" Width="8" Height="4" Stretch="Fill" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Border>
                                             </Grid>
                                             <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ArrowSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter TargetName="ArrowSurface" Property="BorderBrush" Value="{StaticResource Brush.Border.Strong}"/></Trigger>
-                                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="ArrowSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}"/></Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ArrowSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter TargetName="ArrowSurface" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}"/></Trigger>
+                                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="ArrowSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/></Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </ToggleButton.Template>
                                 </ToggleButton>
                                 <ContentPresenter Margin="{TemplateBinding Padding}" IsHitTestVisible="False" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
                                 <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}" Placement="Bottom" PopupAnimation="Fade">
-                                    <Border x:Name="DropDownSurface" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}" Background="{StaticResource Brush.Surface}" BorderBrush="{StaticResource Brush.Border.Strong}" BorderThickness="1" SnapsToDevicePixels="True">
+                                    <Border x:Name="DropDownSurface" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" SnapsToDevicePixels="True">
                                         <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                             <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
                                         </ScrollViewer>
@@ -200,9 +276,9 @@
                                 </Popup>
                             </Grid>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource Brush.Border.Strong}"/></Trigger>
-                                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource Brush.Status.Info}"/></Trigger>
-                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboSurface" Property="Background" Value="{StaticResource Brush.Surface.Disabled}"/><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{StaticResource Brush.Border.Disabled}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Disabled}"/></Trigger>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}"/></Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{DynamicResource Brush.Status.Info}"/></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ComboSurface" Property="Background" Value="{DynamicResource Brush.Surface.Disabled}"/><Setter TargetName="ComboSurface" Property="BorderBrush" Value="{DynamicResource Brush.Border.Disabled}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Disabled}"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
@@ -212,7 +288,7 @@
                 <Setter Property="Height" Value="27" />
                 <Setter Property="MinHeight" Value="{StaticResource Control.RowHeight}" />
                 <Setter Property="Padding" Value="{StaticResource Space.ComboOptionPadding}" />
-                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -224,10 +300,10 @@
                                 <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                             </Border>
                             <ControlTemplate.Triggers>
-                                <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="OptionSurface" Property="Background" Value="{StaticResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></Trigger>
-                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="OptionSurface" Property="Background" Value="{StaticResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.OnSelected}"/></Trigger>
-                                <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsHighlighted" Value="True"/></MultiTrigger.Conditions><Setter TargetName="OptionSurface" Property="Background" Value="{StaticResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{StaticResource Brush.Text.Highlight}"/></MultiTrigger>
-                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{StaticResource Brush.Text.Disabled}"/></Trigger>
+                                <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="OptionSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></Trigger>
+                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="OptionSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnSelected}"/></Trigger>
+                                <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsHighlighted" Value="True"/></MultiTrigger.Conditions><Setter TargetName="OptionSurface" Property="Background" Value="{DynamicResource Brush.Surface.SelectedHover}"/><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Highlight}"/></MultiTrigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource Brush.Text.Disabled}"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>

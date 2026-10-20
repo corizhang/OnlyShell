@@ -17,12 +17,40 @@ namespace OnlyShell.App;
 public partial class MainWindow : Window
 {
     private readonly WorkspaceViewModel _viewModel;
+    private readonly Dictionary<string, Color> _baseThemeColors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _baseTypeSizes = new(StringComparer.Ordinal);
+    private static readonly string[] ThemeBrushKeys =
+    [
+        "Brush.Canvas", "Brush.Surface", "Brush.Surface.Raised", "Brush.Surface.Input", "Brush.Surface.Editor",
+        "Brush.Surface.Terminal", "Brush.Surface.Output", "Brush.Surface.Hover", "Brush.Surface.Selected",
+        "Brush.Surface.SelectedHover", "Brush.Surface.SelectionQuiet", "Brush.Surface.HoverSubtle", "Brush.Surface.ListHover",
+        "Brush.Surface.Disabled", "Brush.Surface.StatusBar", "Brush.Surface.Warning", "Brush.Surface.MetricTrack",
+        "Brush.Surface.Metric", "Brush.Surface.TerminalToolbar", "Brush.Surface.TerminalPopup", "Brush.Surface.Error",
+        "Brush.Surface.ListRow", "Brush.Surface.ListRowAlt", "Brush.Surface.EditorAlt", "Brush.Border.Subtle",
+        "Brush.Border.Default", "Brush.Border.Strong", "Brush.Border.Focus", "Brush.Border.Selected",
+        "Brush.Border.Disabled", "Brush.Border.Success", "Brush.Border.Warning", "Brush.Border.Dialog",
+        "Brush.Border.Error", "Brush.Border.MetricsChartGrid", "Brush.Text.Primary", "Brush.Text.Secondary",
+        "Brush.Text.Disabled", "Brush.Text.OnAccent", "Brush.Text.OnSelected", "Brush.Text.Header",
+        "Brush.Text.Highlight", "Brush.Text.HighEmphasis", "Brush.Text.Tertiary", "Brush.Text.TerminalDefault",
+        "Brush.Text.TerminalSuccess", "Brush.Text.Terminal", "Brush.Icon.Muted", "Brush.Accent.Primary",
+        "Brush.Accent.Hover", "Brush.Status.Success", "Brush.Status.Info", "Brush.Status.Warning",
+        "Brush.Status.Error", "Brush.Status.InfoBright", "Brush.Status.WarningBright", "Brush.Status.SuccessBright",
+        "Brush.Accent.Purple"
+    ];
+    private static readonly string[] ScalableTypeSizeKeys =
+    [
+        "Type.Size.Caption", "Type.Size.Tiny", "Type.Size.MetricTiny", "Type.Size.Label", "Type.Size.Small",
+        "Type.Size.Body", "Type.Size.BodyLarge", "Type.Size.BodyEmphasis", "Type.Size.Heading",
+        "Type.Size.HeadingSmall", "Type.Size.Title", "Type.Size.SectionTitle", "Type.Size.Display", "Type.Size.PageTitle"
+    ];
 
     public MainWindow(WorkspaceViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        CaptureBaseDesignTokens();
+        ApplyAppearancePreferences();
         DiagnosticLogPathText.Text = ApplicationDiagnostics.DirectoryPath;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         ScriptCodeEditor.Text = _viewModel.ScriptContent;
@@ -62,6 +90,64 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ChooseScriptFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var folders = _viewModel.Scripts.Select(script => script.FolderPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path));
+            var picker = new FolderPickerWindow(folders, _viewModel.ScriptFolderPath) { Owner = this };
+            if (picker.ShowDialog() == true)
+                _viewModel.ScriptFolderPath = picker.SelectedPath;
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("FOLDER_PICKER", "Could not choose a script folder.", exception);
+            MessageBox.Show(this, $"文件夹选择失败：{exception.Message}", "OnlyShell / Folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void NewScript_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.NewScriptCommand.Execute(null);
+        ShowScriptInfoDialog();
+    }
+
+    private void EditScriptInfo_Click(object sender, RoutedEventArgs e) => ShowScriptInfoDialog();
+
+    private void ShowScriptInfoDialog()
+    {
+        var dialog = new ScriptInfoWindow(
+            _viewModel.ScriptName,
+            _viewModel.ScriptDescription,
+            _viewModel.ScriptFolderPath,
+            _viewModel.SelectedScriptRuntime,
+            _viewModel.SelectedScriptExecutionTarget,
+            _viewModel.Scripts.Select(script => script.FolderPath))
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        _viewModel.ScriptName = dialog.ScriptName;
+        _viewModel.ScriptDescription = dialog.ScriptDescription;
+        _viewModel.ScriptFolderPath = dialog.ScriptFolderPath;
+        _viewModel.SelectedScriptExecutionTarget = dialog.ExecutionTarget;
+        _viewModel.SelectedScriptRuntime = dialog.ScriptRuntime;
+    }
+
+    private void RecentRuns_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox listBox
+            && ItemsControl.ContainerFromElement(listBox, e.OriginalSource as DependencyObject) is ListBoxItem { DataContext: OnlyShell.Core.Scripts.ScriptRunLog run } item)
+        {
+            item.IsSelected = true;
+            _viewModel.SelectedScriptRun = run;
+        }
+    }
+
     private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(WorkspaceViewModel.ActiveSection) && _viewModel.ActiveSection == "终端")
@@ -70,10 +156,102 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(WorkspaceViewModel.SelectedScriptRuntime))
             UpdateScriptEditorHighlighting();
 
+        if (e.PropertyName is nameof(WorkspaceViewModel.AppearanceTheme)
+            or nameof(WorkspaceViewModel.UiFontFamily) or nameof(WorkspaceViewModel.UiFontSize))
+            ApplyAppearancePreferences();
+
         if (e.PropertyName == nameof(WorkspaceViewModel.ScriptContent)
             && ScriptCodeEditor.Text != _viewModel.ScriptContent)
             ScriptCodeEditor.Text = _viewModel.ScriptContent;
     }
+
+    private void CaptureBaseDesignTokens()
+    {
+        foreach (var key in ThemeBrushKeys)
+        {
+            if (Application.Current.Resources[key] is SolidColorBrush brush)
+                _baseThemeColors[key] = brush.Color;
+        }
+
+        foreach (var key in ScalableTypeSizeKeys)
+        {
+            if (Application.Current.Resources[key] is double size)
+                _baseTypeSizes[key] = size;
+        }
+    }
+
+    private void ApplyAppearancePreferences()
+    {
+        var colors = GetThemeOverrides(_viewModel.AppearanceTheme);
+        foreach (var key in ThemeBrushKeys)
+        {
+            var color = colors.TryGetValue(key, out var hex)
+                ? (Color)ColorConverter.ConvertFromString(hex)
+                : _baseThemeColors.GetValueOrDefault(key);
+            Application.Current.Resources[key] = new SolidColorBrush(color);
+        }
+
+        var uiFont = new FontFamily(_viewModel.UiFontFamily);
+        Application.Current.Resources["Font.UI"] = uiFont;
+        Application.Current.Resources["Font.Window"] = uiFont;
+        var sizeDelta = _viewModel.UiFontSize - 11;
+        foreach (var key in ScalableTypeSizeKeys)
+        {
+            if (_baseTypeSizes.TryGetValue(key, out var baseSize))
+                Application.Current.Resources[key] = Math.Clamp(baseSize + sizeDelta, 7, 30);
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> GetThemeOverrides(string theme) => theme switch
+    {
+        "海洋蓝" => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Brush.Canvas"] = "#101820", ["Brush.Surface"] = "#16222C", ["Brush.Surface.Raised"] = "#1D2D39",
+            ["Brush.Surface.Input"] = "#0D151C", ["Brush.Surface.Editor"] = "#09121A", ["Brush.Surface.Terminal"] = "#050B10",
+            ["Brush.Surface.Output"] = "#081510", ["Brush.Surface.Hover"] = "#263B49", ["Brush.Surface.Selected"] = "#29424B",
+            ["Brush.Surface.SelectedHover"] = "#34535D", ["Brush.Surface.SelectionQuiet"] = "#20343D", ["Brush.Surface.HoverSubtle"] = "#1C2A34",
+            ["Brush.Surface.ListHover"] = "#1B2B36", ["Brush.Surface.Disabled"] = "#18232B", ["Brush.Surface.StatusBar"] = "#131F28",
+            ["Brush.Surface.Warning"] = "#292519", ["Brush.Surface.MetricTrack"] = "#263640", ["Brush.Surface.Metric"] = "#0B141B",
+            ["Brush.Surface.TerminalToolbar"] = "#1B2A34", ["Brush.Surface.TerminalPopup"] = "#1D2B35", ["Brush.Surface.Error"] = "#291D20",
+            ["Brush.Surface.ListRow"] = "#14202A", ["Brush.Surface.ListRowAlt"] = "#182630", ["Brush.Surface.EditorAlt"] = "#0B141C",
+            ["Brush.Border.Subtle"] = "#30414D", ["Brush.Border.Default"] = "#405461", ["Brush.Border.Strong"] = "#526B79",
+            ["Brush.Border.Focus"] = "#64C9D8", ["Brush.Border.Selected"] = "#4B7D86", ["Brush.Border.Disabled"] = "#293741",
+            ["Brush.Border.Success"] = "#285344", ["Brush.Border.Warning"] = "#64552C", ["Brush.Border.Dialog"] = "#344752",
+            ["Brush.Border.Error"] = "#8C4744", ["Brush.Border.MetricsChartGrid"] = "#293C47", ["Brush.Text.Primary"] = "#E1EAF0",
+            ["Brush.Text.Secondary"] = "#A4B5C0", ["Brush.Text.Disabled"] = "#71828C", ["Brush.Text.OnAccent"] = "#0A1820",
+            ["Brush.Text.OnSelected"] = "#E7F9FA", ["Brush.Text.Header"] = "#C6D5DF", ["Brush.Text.Highlight"] = "#FFFFFF",
+            ["Brush.Text.HighEmphasis"] = "#EDF4F8", ["Brush.Text.Tertiary"] = "#81949F", ["Brush.Text.TerminalDefault"] = "#DCE6F2",
+            ["Brush.Text.TerminalSuccess"] = "#8ED6A5", ["Brush.Text.Terminal"] = "#DDE7ED", ["Brush.Icon.Muted"] = "#A5B5BF",
+            ["Brush.Accent.Primary"] = "#56C8CF", ["Brush.Accent.Hover"] = "#68D9DF", ["Brush.Status.Success"] = "#63C985",
+            ["Brush.Status.Info"] = "#56C8CF", ["Brush.Status.Warning"] = "#E7B34D", ["Brush.Status.Error"] = "#E68174",
+            ["Brush.Status.InfoBright"] = "#65D8EA", ["Brush.Status.WarningBright"] = "#F1C365", ["Brush.Status.SuccessBright"] = "#68E09B",
+            ["Brush.Accent.Purple"] = "#B58CFF"
+        },
+        "高对比" => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Brush.Canvas"] = "#080808", ["Brush.Surface"] = "#121212", ["Brush.Surface.Raised"] = "#1C1C1C",
+            ["Brush.Surface.Input"] = "#050505", ["Brush.Surface.Editor"] = "#030303", ["Brush.Surface.Terminal"] = "#000000",
+            ["Brush.Surface.Output"] = "#030805", ["Brush.Surface.Hover"] = "#303030", ["Brush.Surface.Selected"] = "#463500",
+            ["Brush.Surface.SelectedHover"] = "#5B4600", ["Brush.Surface.SelectionQuiet"] = "#302500", ["Brush.Surface.HoverSubtle"] = "#202020",
+            ["Brush.Surface.ListHover"] = "#262626", ["Brush.Surface.Disabled"] = "#161616", ["Brush.Surface.StatusBar"] = "#101010",
+            ["Brush.Surface.Warning"] = "#211A00", ["Brush.Surface.MetricTrack"] = "#333333", ["Brush.Surface.Metric"] = "#050505",
+            ["Brush.Surface.TerminalToolbar"] = "#1B1B1B", ["Brush.Surface.TerminalPopup"] = "#1B1B1B", ["Brush.Surface.Error"] = "#260D0D",
+            ["Brush.Surface.ListRow"] = "#101010", ["Brush.Surface.ListRowAlt"] = "#181818", ["Brush.Surface.EditorAlt"] = "#030303",
+            ["Brush.Border.Subtle"] = "#565656", ["Brush.Border.Default"] = "#777777", ["Brush.Border.Strong"] = "#A0A0A0",
+            ["Brush.Border.Focus"] = "#5DEBFF", ["Brush.Border.Selected"] = "#E7A92F", ["Brush.Border.Disabled"] = "#454545",
+            ["Brush.Border.Success"] = "#3E8B58", ["Brush.Border.Warning"] = "#94752A", ["Brush.Border.Dialog"] = "#777777",
+            ["Brush.Border.Error"] = "#B14E4E", ["Brush.Border.MetricsChartGrid"] = "#444444", ["Brush.Text.Primary"] = "#FFFFFF",
+            ["Brush.Text.Secondary"] = "#D0D0D0", ["Brush.Text.Disabled"] = "#A0A0A0", ["Brush.Text.OnAccent"] = "#080808",
+            ["Brush.Text.OnSelected"] = "#FFF4D6", ["Brush.Text.Header"] = "#F0F0F0", ["Brush.Text.Highlight"] = "#FFFFFF",
+            ["Brush.Text.HighEmphasis"] = "#FFFFFF", ["Brush.Text.Tertiary"] = "#B8B8B8", ["Brush.Text.TerminalDefault"] = "#FFFFFF",
+            ["Brush.Text.TerminalSuccess"] = "#A4FFB8", ["Brush.Text.Terminal"] = "#FFFFFF", ["Brush.Icon.Muted"] = "#D0D0D0",
+            ["Brush.Accent.Primary"] = "#FFC247", ["Brush.Accent.Hover"] = "#FFD36F", ["Brush.Status.Success"] = "#72F09B",
+            ["Brush.Status.Info"] = "#63E9F5", ["Brush.Status.Warning"] = "#FFC247", ["Brush.Status.Error"] = "#FF9388",
+            ["Brush.Status.InfoBright"] = "#75F2FF", ["Brush.Status.WarningBright"] = "#FFD36F", ["Brush.Status.SuccessBright"] = "#7AFFA8",
+            ["Brush.Accent.Purple"] = "#D3B6FF"
+        },
+        _ => new Dictionary<string, string>(StringComparer.Ordinal)
+    };
 
     private void ScriptCodeEditor_TextChanged(object? sender, EventArgs e)
     {
@@ -165,7 +343,7 @@ public partial class MainWindow : Window
 
     private async void Hosts_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListBox { SelectedItem: OnlyShell.Core.Hosts.HostProfile host })
+        if (sender is ListBox { SelectedItem: HostCatalogNode { Host: { } host } })
             await _viewModel.OpenHostTerminalCommand.ExecuteAsync(host);
     }
 

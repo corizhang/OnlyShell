@@ -165,6 +165,7 @@
     <sys:Double x:Key="Control.InputHeight.Dense">25</sys:Double>
     <GridLength x:Key="Control.FormFieldRowHeight">42</GridLength>
     <sys:Double x:Key="Control.SplitterGripSize">5</sys:Double>
+    <sys:Double x:Key="Control.ScrollBarThickness">8</sys:Double>
     <GridLength x:Key="Control.Tab.ActiveIndicatorRowHeight">2</GridLength>
     <sys:Double x:Key="Control.TransferButtonWidth">38</sys:Double>
     <sys:Double x:Key="Control.TransferButtonHeight">34</sys:Double>

@@ -6,9 +6,9 @@ namespace OnlyShell.App;
 
 public sealed class WpfHostEditorDialogService : IHostEditorDialogService
 {
-    public Task<HostProfile?> EditAsync(HostProfile? current)
+    public Task<HostProfile?> EditAsync(HostProfile? current, IReadOnlyList<string>? existingGroups = null)
     {
-        var dialog = new HostEditorWindow(current) { Owner = Application.Current.MainWindow };
+        var dialog = new HostEditorWindow(current, existingGroups) { Owner = Application.Current.MainWindow };
         return Task.FromResult(dialog.ShowDialog() == true ? dialog.Result : null);
     }
 

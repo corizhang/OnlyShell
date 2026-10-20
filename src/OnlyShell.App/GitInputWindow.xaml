@@ -6,14 +6,14 @@
         Background="{DynamicResource Brush.Canvas}" Foreground="{DynamicResource Brush.Text.Primary}">
     <Grid Margin="18">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <TextBlock x:Name="HeadingText" Text="// GIT" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}" />
-        <TextBlock x:Name="PromptText" Grid.Row="1" Text="输入值" Margin="0,9,0,5" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Small}" />
-        <TextBox x:Name="ValueBox" Grid.Row="2" Height="{StaticResource Control.InputHeight}" Padding="{StaticResource Space.Input.Padding}" VerticalContentAlignment="Center" Background="{StaticResource Brush.Surface.Input}" Foreground="{DynamicResource Brush.Text.Primary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" FontSize="{StaticResource Type.Size.Body}" KeyDown="ValueBox_KeyDown" />
+        <TextBlock x:Name="HeadingText" Text="// GIT" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
+        <TextBlock x:Name="PromptText" Grid.Row="1" Text="输入值" Margin="0,9,0,5" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Small}" />
+        <TextBox x:Name="ValueBox" Grid.Row="2" Height="{StaticResource Control.InputHeight}" Padding="{StaticResource Space.Input.Padding}" VerticalContentAlignment="Center" Background="{DynamicResource Brush.Surface.Input}" Foreground="{DynamicResource Brush.Text.Primary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" FontSize="{DynamicResource Type.Size.Body}" KeyDown="ValueBox_KeyDown" />
         <DockPanel Grid.Row="3" LastChildFill="False" Margin="0,16,0,0">
-            <TextBlock x:Name="ValidationText" Foreground="{DynamicResource Brush.Status.Error}" FontSize="{StaticResource Type.Size.Caption}" VerticalAlignment="Center" />
+            <TextBlock x:Name="ValidationText" Foreground="{DynamicResource Brush.Status.Error}" FontSize="{DynamicResource Type.Size.Caption}" VerticalAlignment="Center" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="取消" IsCancel="True" MinWidth="76" Padding="10,6" Margin="0,0,8,0" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" />
-                <Button Content="确定" IsDefault="True" MinWidth="76" Padding="10,6" Click="Accept_Click" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{StaticResource Brush.Text.OnAccent}" BorderThickness="0" FontWeight="SemiBold" />
+                <Button Content="确定" IsDefault="True" MinWidth="76" Padding="10,6" Click="Accept_Click" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" FontWeight="SemiBold" />
             </StackPanel>
         </DockPanel>
     </Grid>

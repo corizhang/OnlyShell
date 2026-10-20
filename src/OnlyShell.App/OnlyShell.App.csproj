@@ -5,8 +5,11 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>OnlyShell</AssemblyName>
     <RootNamespace>OnlyShell.App</RootNamespace>
+    <ApplicationIcon>Assets\OnlyShell.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\OnlyShell.ico" />
+    <Resource Include="Assets\OnlyShell.png" />
     <ProjectReference Include="..\OnlyShell.Presentation\OnlyShell.Presentation.csproj" />
     <ProjectReference Include="..\OnlyShell.Infrastructure.Data\OnlyShell.Infrastructure.Data.csproj" />
     <ProjectReference Include="..\OnlyShell.Infrastructure.Ssh\OnlyShell.Infrastructure.Ssh.csproj" />

@@ -3,30 +3,30 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OnlyShell / Script Inputs" Width="700" Height="620" MinWidth="560" MinHeight="440"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="{StaticResource Brush.Canvas}" Foreground="{StaticResource Brush.Text.Primary}">
+        Background="{DynamicResource Brush.Canvas}" Foreground="{DynamicResource Brush.Text.Primary}">
     <Grid Margin="16">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <DockPanel Margin="{StaticResource Space.Gap.Bottom.SM}">
-                    <TextBlock Text="// SCRIPT_ARGUMENTS" Foreground="{StaticResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}" VerticalAlignment="Center"/>
-                    <Button DockPanel.Dock="Right" Content="[ + ARG ]" Click="AddArgument_Click" Padding="7,3" Background="Transparent" Foreground="{StaticResource Brush.Status.Info}" BorderBrush="{StaticResource Brush.Border.Subtle}"/>
+                    <TextBlock Text="// SCRIPT_ARGUMENTS" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" VerticalAlignment="Center"/>
+                    <Button DockPanel.Dock="Right" Content="[ + ARG ]" Click="AddArgument_Click" Padding="7,3" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/>
                 </DockPanel>
-                <TextBlock Text="每个参数单独填写；命名参数会按模板顺序传递。没有模板时可点 + ARG 添加参数。" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Small}" Margin="0,0,0,7" TextWrapping="Wrap"/>
+                <TextBlock Text="每个参数单独填写；命名参数会按模板顺序传递。没有模板时可点 + ARG 添加参数。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Small}" Margin="0,0,0,7" TextWrapping="Wrap"/>
                 <StackPanel x:Name="ArgumentsPanel"/>
                 <DockPanel Margin="0,14,0,5">
-                    <TextBlock Text="// ENVIRONMENT_VARIABLES" Foreground="{StaticResource Brush.Status.Info}" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}" VerticalAlignment="Center"/>
-                    <Button DockPanel.Dock="Right" Content="[ + ENV ]" Click="AddEnvironment_Click" Padding="7,3" Background="Transparent" Foreground="{StaticResource Brush.Status.Info}" BorderBrush="{StaticResource Brush.Border.Subtle}"/>
+                    <TextBlock Text="// ENVIRONMENT_VARIABLES" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" VerticalAlignment="Center"/>
+                    <Button DockPanel.Dock="Right" Content="[ + ENV ]" Click="AddEnvironment_Click" Padding="7,3" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/>
                 </DockPanel>
-                <TextBlock Text="每个环境变量单独填写名称和值。模板变量会自动列出；可添加临时变量。" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Small}" Margin="0,0,0,7" TextWrapping="Wrap"/>
+                <TextBlock Text="每个环境变量单独填写名称和值。模板变量会自动列出；可添加临时变量。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Small}" Margin="0,0,0,7" TextWrapping="Wrap"/>
                 <StackPanel x:Name="EnvironmentPanel"/>
             </StackPanel>
         </ScrollViewer>
         <Grid Grid.Row="1" Margin="0,12,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBlock Text="参数和环境变量使用当前 Windows 用户加密保存，供下次预填；不会进入脚本定义、运行历史或 GitHub 同步。运行中的脚本仍可读取这些值，请勿输入长期凭据。" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Label}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <Button Grid.Column="1" Content="CANCEL" IsCancel="True" MinWidth="86" Margin="{StaticResource Space.Gap.Right.LG}" Padding="{StaticResource Space.Button.Padding}" Background="Transparent" Foreground="{StaticResource Brush.Text.Secondary}" BorderBrush="{StaticResource Brush.Border.Subtle}"/>
-            <Button Grid.Column="2" Content="RUN" IsDefault="True" Click="Run_Click" MinWidth="86" Padding="{StaticResource Space.Button.Padding}" Background="{StaticResource Brush.Accent.Primary}" Foreground="{StaticResource Brush.Text.OnAccent}" BorderThickness="0"/>
+            <TextBlock Text="参数和环境变量使用当前 Windows 用户加密保存，供下次预填；不会进入脚本定义、运行历史或 GitHub 同步。运行中的脚本仍可读取这些值，请勿输入长期凭据。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Label}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <Button Grid.Column="1" Content="CANCEL" IsCancel="True" MinWidth="86" Margin="{StaticResource Space.Gap.Right.LG}" Padding="{StaticResource Space.Button.Padding}" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/>
+            <Button Grid.Column="2" Content="RUN" IsDefault="True" Click="Run_Click" MinWidth="86" Padding="{StaticResource Space.Button.Padding}" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0"/>
         </Grid>
     </Grid>
 </Window>

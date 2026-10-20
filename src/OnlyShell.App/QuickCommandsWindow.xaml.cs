@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Threading;
 using OnlyShell.Presentation.ViewModels;
 
@@ -15,20 +13,36 @@ public partial class QuickCommandsWindow : Window
     private readonly JsonQuickCommandStore _store = new();
     private readonly ObservableCollection<QuickCommandDefinition> _commands = [];
     private readonly ObservableCollection<QuickCommandVariable> _variables = [];
-    private readonly ICollectionView _commandsView;
+    private readonly ObservableCollection<CommandTreeNode> _visibleCommandNodes = [];
     private readonly Dictionary<string, Control> _variableInputs = new(StringComparer.OrdinalIgnoreCase);
     private Guid? _selectedId;
+    private string _folderPath = "General";
     private bool _loadingSelection;
 
     private static readonly Regex PlaceholderRegex = new(@"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}", RegexOptions.Compiled);
+
+    private sealed class CommandTreeNode(string name, string path, QuickCommandDefinition? command = null)
+    {
+        public string Name { get; } = name;
+        public string Path { get; } = path;
+        public QuickCommandDefinition? Command { get; } = command;
+        public bool IsFolder => Command is null;
+        public string KindGlyph => IsFolder ? "▰" : "▤";
+        public string ExpandGlyph => IsExpanded ? "▾" : "▸";
+        public double IndentWidth => Depth * 14;
+        public int Depth { get; set; }
+        public bool IsExpanded { get; set; } = command is null;
+        public string Detail => Command is null
+            ? $"{Children.Count} ITEM{(Children.Count == 1 ? "" : "S")}"
+            : Command.Description;
+        public List<CommandTreeNode> Children { get; } = [];
+    }
 
     public QuickCommandsWindow(TerminalTabViewModel terminalTab)
     {
         InitializeComponent();
         _terminalTab = terminalTab;
-        _commandsView = CollectionViewSource.GetDefaultView(_commands);
-        _commandsView.Filter = MatchesSearch;
-        CommandsList.ItemsSource = _commandsView;
+        CommandsList.ItemsSource = _visibleCommandNodes;
         VariablesGrid.ItemsSource = _variables;
         Loaded += async (_, _) => await LoadCommandsAsync();
     }
@@ -38,13 +52,14 @@ public partial class QuickCommandsWindow : Window
         try
         {
             var loaded = await _store.LoadAsync();
-            foreach (var command in loaded.OrderBy(item => item.Category, StringComparer.CurrentCultureIgnoreCase)
+            foreach (var command in loaded.Select(MigrateFolderPath)
+                         .OrderBy(item => item.FolderPath, StringComparer.CurrentCultureIgnoreCase)
                          .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase))
                 _commands.Add(command);
-            _commandsView.Refresh();
+            RebuildCommandTree();
             StatusText.Text = $"{_commands.Count} SAVED COMMANDS · LOCAL ONLY";
             if (_commands.Count > 0)
-                CommandsList.SelectedIndex = 0;
+                CommandsList.SelectedItem = _visibleCommandNodes.FirstOrDefault(node => node.Command is not null);
         }
         catch (Exception exception)
         {
@@ -52,31 +67,31 @@ public partial class QuickCommandsWindow : Window
         }
     }
 
-    private bool MatchesSearch(object item)
+    private bool MatchesSearch(QuickCommandDefinition command)
     {
-        if (item is not QuickCommandDefinition command)
-            return false;
         var query = SearchBox?.Text?.Trim();
         return string.IsNullOrEmpty(query)
             || command.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || command.Category.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || command.FolderPath.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || command.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || command.Command.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || (command.Variables ?? []).Any(variable => variable.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
                 || variable.Label.Contains(query, StringComparison.CurrentCultureIgnoreCase));
     }
 
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => _commandsView.Refresh();
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => RebuildCommandTree();
 
     private void CommandsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingSelection)
             return;
-        if (CommandsList.SelectedItem is not QuickCommandDefinition command)
+        if (CommandsList.SelectedItem is not CommandTreeNode { Command: { } command })
             return;
         _selectedId = command.Id;
         NameBox.Text = command.Name;
-        CategoryBox.Text = command.Category;
+        _folderPath = command.FolderPath;
+        UpdateFolderPathText();
         DescriptionBox.Text = command.Description;
         CommandBox.Text = command.Command;
         _loadingSelection = true;
@@ -86,7 +101,7 @@ public partial class QuickCommandsWindow : Window
         _loadingSelection = false;
         RebuildVariableInputs();
         UpdatePreview();
-        StatusText.Text = $"SELECTED · {command.Category}";
+        StatusText.Text = $"SELECTED · {(_folderPath.Length == 0 ? "ROOT" : _folderPath)}";
     }
 
     private void NewCommand_Click(object sender, RoutedEventArgs e)
@@ -94,7 +109,8 @@ public partial class QuickCommandsWindow : Window
         _selectedId = null;
         CommandsList.SelectedItem = null;
         NameBox.Text = string.Empty;
-        CategoryBox.Text = "General";
+        _folderPath = "General";
+        UpdateFolderPathText();
         DescriptionBox.Text = string.Empty;
         CommandBox.Text = string.Empty;
         _variables.Clear();
@@ -149,10 +165,11 @@ public partial class QuickCommandsWindow : Window
         var definition = new QuickCommandDefinition(
             id,
             name,
-            string.IsNullOrWhiteSpace(CategoryBox.Text) ? "General" : CategoryBox.Text.Trim(),
+            _folderPath.Length == 0 ? "General" : _folderPath,
             commandText,
             DescriptionBox.Text.Trim())
         {
+            FolderPath = NormalizeFolderPath(_folderPath),
             Variables = _variables.Select(variable =>
             {
                 var saved = Clone(variable);
@@ -173,9 +190,9 @@ public partial class QuickCommandsWindow : Window
         try
         {
             await PersistAsync();
-            _commandsView.Refresh();
+            RebuildCommandTree();
             _loadingSelection = true;
-            CommandsList.SelectedItem = _commands.FirstOrDefault(item => item.Id == id);
+            CommandsList.SelectedItem = _visibleCommandNodes.FirstOrDefault(item => item.Command?.Id == id);
             _loadingSelection = false;
             StatusText.Text = "SAVED · LOCAL ONLY";
         }
@@ -200,8 +217,10 @@ public partial class QuickCommandsWindow : Window
 
         _commands.Remove(selected);
         _selectedId = null;
+        CommandsList.SelectedItem = null;
         NameBox.Clear();
-        CategoryBox.Clear();
+        _folderPath = "";
+        UpdateFolderPathText();
         DescriptionBox.Clear();
         CommandBox.Clear();
         _variables.Clear();
@@ -210,6 +229,7 @@ public partial class QuickCommandsWindow : Window
         try
         {
             await PersistAsync();
+            RebuildCommandTree();
             StatusText.Text = "DELETED · LOCAL ONLY";
         }
         catch (Exception exception)
@@ -426,6 +446,108 @@ public partial class QuickCommandsWindow : Window
     };
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void ChooseCommandFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new FolderPickerWindow(_commands.Select(command => command.FolderPath), _folderPath) { Owner = this };
+            if (picker.ShowDialog() == true)
+            {
+                _folderPath = picker.SelectedPath;
+                UpdateFolderPathText();
+            }
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("FOLDER_PICKER", "Could not choose a quick command folder.", exception);
+            MessageBox.Show(this, $"文件夹选择失败：{exception.Message}", "OnlyShell / Folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ToggleCommandFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not CommandTreeNode { IsFolder: true } node)
+            return;
+        node.IsExpanded = !node.IsExpanded;
+        RebuildCommandTree();
+    }
+
+    private void UpdateFolderPathText() => FolderPathText.Text = string.IsNullOrWhiteSpace(_folderPath) ? "/ (根目录)" : $"/ {_folderPath}";
+
+    private void RebuildCommandTree()
+    {
+        var expansion = EnumerateNodes(_visibleCommandNodes)
+            .Where(node => node.IsFolder)
+            .ToDictionary(node => node.Path, node => node.IsExpanded, StringComparer.OrdinalIgnoreCase);
+        var roots = new List<CommandTreeNode>();
+        var folders = new Dictionary<string, CommandTreeNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (var command in _commands.Where(MatchesSearch))
+        {
+            var parent = roots;
+            var segments = NormalizeFolderPath(command.FolderPath).Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var pathSegments = new List<string>();
+            foreach (var segment in segments)
+            {
+                pathSegments.Add(segment);
+                var path = string.Join('/', pathSegments);
+                if (!folders.TryGetValue(path, out var folder))
+                {
+                    folder = new CommandTreeNode(segment, path)
+                    {
+                        IsExpanded = SearchBox.Text.Trim().Length > 0 || !expansion.TryGetValue(path, out var expanded) || expanded
+                    };
+                    folders.Add(path, folder);
+                    parent.Add(folder);
+                }
+                parent = folder.Children;
+            }
+            parent.Add(new CommandTreeNode(command.Name, command.FolderPath, command));
+        }
+        SortNodes(roots);
+        _visibleCommandNodes.Clear();
+        AddVisibleNodes(roots, 0);
+    }
+
+    private void AddVisibleNodes(IReadOnlyList<CommandTreeNode> nodes, int depth)
+    {
+        foreach (var node in nodes)
+        {
+            node.Depth = depth;
+            _visibleCommandNodes.Add(node);
+            if (node.IsFolder && node.IsExpanded)
+                AddVisibleNodes(node.Children, depth + 1);
+        }
+    }
+
+    private static IEnumerable<CommandTreeNode> EnumerateNodes(IEnumerable<CommandTreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in EnumerateNodes(node.Children))
+                yield return child;
+        }
+    }
+
+    private static void SortNodes(List<CommandTreeNode> nodes)
+    {
+        nodes.Sort((left, right) =>
+        {
+            var folderOrder = right.IsFolder.CompareTo(left.IsFolder);
+            return folderOrder != 0 ? folderOrder : StringComparer.CurrentCultureIgnoreCase.Compare(left.Name, right.Name);
+        });
+        foreach (var node in nodes)
+            SortNodes(node.Children);
+    }
+
+    private static string NormalizeFolderPath(string path) => string.Join('/',
+        (path ?? "").Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(segment => segment is not "." and not ".."));
+
+    private static QuickCommandDefinition MigrateFolderPath(QuickCommandDefinition command) => string.IsNullOrWhiteSpace(command.FolderPath)
+        ? command with { FolderPath = NormalizeFolderPath(command.Category == "General" ? "General" : command.Category) }
+        : command with { FolderPath = NormalizeFolderPath(command.FolderPath) };
 
     private int FindCommandIndex(Guid id)
     {

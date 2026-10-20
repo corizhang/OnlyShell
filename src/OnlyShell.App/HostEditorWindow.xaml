@@ -3,20 +3,20 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="主机配置" Width="{StaticResource Dialog.Width.Connection}" Height="590" MinWidth="{StaticResource Dialog.MinWidth.Connection}" MinHeight="550"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="{StaticResource Brush.Canvas}" Foreground="{StaticResource Brush.Text.Primary}"
-        FontFamily="{StaticResource Font.Window}">
+        Background="{DynamicResource Brush.Canvas}" Foreground="{DynamicResource Brush.Text.Primary}"
+        FontFamily="{DynamicResource Font.Window}">
     <Window.Resources>
         <Style x:Key="FieldBox" TargetType="TextBox">
             <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="7,4" />
-            <Setter Property="Background" Value="{StaticResource Brush.Surface.Input}" />
-            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Subtle}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Input}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Subtle}" />
             <Setter Property="FontFamily" Value="Cascadia Code" />
             <Setter Property="FontSize" Value="11" />
         </Style>
         <Style x:Key="FieldLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -24,9 +24,9 @@
     <Grid Margin="{StaticResource Space.Inset.LG}">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel Margin="0,0,0,16">
-            <TextBlock x:Name="HeadingText" Text="// NEW_HOST" FontFamily="{StaticResource Font.Mono}" FontSize="{StaticResource Type.Size.Small}" Foreground="{StaticResource Brush.Accent.Primary}" />
-            <TextBlock Text="主机配置" FontSize="{StaticResource Type.Size.Display}" FontWeight="SemiBold" Margin="{StaticResource Space.Gap.Top.SM}" />
-            <TextBlock Text="只保存连接资料；密码和私钥由独立的本机凭据存储管理。" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.SM}" />
+            <TextBlock x:Name="HeadingText" Text="// NEW_HOST" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" Foreground="{DynamicResource Brush.Accent.Primary}" />
+            <TextBlock Text="主机配置" FontSize="{DynamicResource Type.Size.Display}" FontWeight="SemiBold" Margin="{StaticResource Space.Gap.Top.SM}" />
+            <TextBlock Text="只保存连接资料；密码和私钥由独立的本机凭据存储管理。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.SM}" />
         </StackPanel>
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -35,24 +35,24 @@
             <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}" Text="主机地址"/><TextBox x:Name="HostBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource FieldBox}" />
             <TextBlock Grid.Row="2" Style="{StaticResource FieldLabel}" Text="端口"/><TextBox x:Name="PortBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource FieldBox}" />
             <TextBlock Grid.Row="3" Style="{StaticResource FieldLabel}" Text="用户名"/><TextBox x:Name="UserBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource FieldBox}" />
-            <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="分组"/><TextBox x:Name="GroupBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource FieldBox}" />
+            <TextBlock Grid.Row="4" Style="{StaticResource FieldLabel}" Text="分组"/><DockPanel Grid.Row="4" Grid.Column="1"><Button Content="选择…" DockPanel.Dock="Right" Click="ChooseGroup_Click" Padding="9,4" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/><Border Background="{DynamicResource Brush.Surface.Input}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="7,5"><TextBlock x:Name="GroupPathText" Text="/ (未分组)" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/></Border></DockPanel>
             <TextBlock Grid.Row="5" Style="{StaticResource FieldLabel}" Text="备注"/><TextBox x:Name="NoteBox" Grid.Row="5" Grid.Column="1" Style="{StaticResource FieldBox}" />
             <TextBlock Grid.Row="6" Style="{StaticResource FieldLabel}" Text="SSH 认证"/>
-            <ComboBox x:Name="AuthenticationBox" Grid.Row="6" Grid.Column="1" Height="30" Background="{StaticResource Brush.Surface.Input}" Foreground="{StaticResource Brush.Text.Primary}" BorderBrush="{StaticResource Brush.Border.Subtle}" SelectionChanged="AuthenticationBox_SelectionChanged" SelectedIndex="0">
+            <ComboBox x:Name="AuthenticationBox" Grid.Row="6" Grid.Column="1" Height="30" Background="{DynamicResource Brush.Surface.Input}" Foreground="{DynamicResource Brush.Text.Primary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" SelectionChanged="AuthenticationBox_SelectionChanged" SelectedIndex="0">
                 <ComboBoxItem Content="密码认证"/><ComboBoxItem Content="私钥认证"/>
             </ComboBox>
             <TextBlock x:Name="PrivateKeyLabel" Grid.Row="7" Style="{StaticResource FieldLabel}" Text="私钥文件" Visibility="Collapsed"/>
             <DockPanel x:Name="PrivateKeyPanel" Grid.Row="7" Grid.Column="1" LastChildFill="True" Visibility="Collapsed">
-                <Button Content="浏览…" DockPanel.Dock="Right" Click="BrowsePrivateKey_Click" Margin="6,0,0,0" Padding="9,3" Background="Transparent" Foreground="{StaticResource Brush.Accent.Primary}" BorderBrush="{StaticResource Brush.Border.Subtle}"/>
+                <Button Content="浏览…" DockPanel.Dock="Right" Click="BrowsePrivateKey_Click" Margin="6,0,0,0" Padding="9,3" Background="Transparent" Foreground="{DynamicResource Brush.Accent.Primary}" BorderBrush="{DynamicResource Brush.Border.Subtle}"/>
                 <TextBox x:Name="PrivateKeyPathBox" Style="{StaticResource FieldBox}" ToolTip="私钥仅使用本机文件路径；文件内容不会复制或同步。" />
             </DockPanel>
-            <TextBlock x:Name="ValidationText" Grid.Row="8" Grid.Column="1" Foreground="{StaticResource Brush.Status.Error}" FontSize="{StaticResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.MD}" TextWrapping="Wrap" />
+            <TextBlock x:Name="ValidationText" Grid.Row="8" Grid.Column="1" Foreground="{DynamicResource Brush.Status.Error}" FontSize="{DynamicResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.MD}" TextWrapping="Wrap" />
         </Grid>
         <DockPanel Grid.Row="2" Margin="0,12,0,0">
-            <TextBlock Text="密码和私钥不会写入主机配置" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="{StaticResource Type.Size.Label}" VerticalAlignment="Center" />
+            <TextBlock Text="密码和私钥不会写入主机配置" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Label}" VerticalAlignment="Center" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button Content="[ ESC ] 取消" IsCancel="True" Background="Transparent" Foreground="{StaticResource Brush.Text.Secondary}" BorderBrush="{StaticResource Brush.Border.Subtle}" BorderThickness="1" Padding="10,7" Margin="{StaticResource Space.Gap.Right.MD}" />
-                <Button Content="保存主机  [ Enter ]" IsDefault="True" Click="Save_Click" Background="{StaticResource Brush.Accent.Primary}" Foreground="{StaticResource Brush.Text.OnAccent}" BorderThickness="0" Padding="12,7" FontWeight="SemiBold" />
+                <Button Content="[ ESC ] 取消" IsCancel="True" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="10,7" Margin="{StaticResource Space.Gap.Right.MD}" />
+                <Button Content="保存主机  [ Enter ]" IsDefault="True" Click="Save_Click" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" Padding="12,7" FontWeight="SemiBold" />
             </StackPanel>
         </DockPanel>
     </Grid>

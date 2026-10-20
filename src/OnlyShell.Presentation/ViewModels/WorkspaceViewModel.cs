@@ -77,6 +77,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     private bool _loadingTerminalPreferences = true;
 
     [ObservableProperty]
+    private string appearanceTheme = "午夜暗色";
+
+    [ObservableProperty]
+    private string uiFontFamily = "Segoe UI";
+
+    [ObservableProperty]
+    private double uiFontSize = 11;
+
+    [ObservableProperty]
     private string terminalFontFamily = "Cascadia Mono";
 
     [ObservableProperty]
@@ -91,8 +100,13 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public IReadOnlyList<string> TerminalFontFamilies { get; } = ["Cascadia Mono", "Consolas", "NSimSun"];
     public IReadOnlyList<double> TerminalFontSizes { get; } = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
     public IReadOnlyList<int> TerminalScrollbackOptions { get; } = [1000, 5000, 10000, 25000, 50000];
+    public IReadOnlyList<string> AppearanceThemes { get; } = ["午夜暗色", "海洋蓝", "高对比"];
+    public IReadOnlyList<string> UiFontFamilies { get; } = ["Segoe UI", "Segoe UI Variable Text", "Microsoft YaHei UI", "Arial"];
+    public IReadOnlyList<double> UiFontSizes { get; } = [9, 10, 11, 12, 13, 14];
 
     public ObservableCollection<HostProfile> Hosts { get; } = [];
+    public ObservableCollection<HostCatalogNode> HostCatalogNodes { get; } = [];
+    public ObservableCollection<HostCatalogNode> VisibleHostCatalogNodes { get; } = [];
     public ObservableCollection<TerminalTabViewModel> TerminalTabs { get; } = [];
     public ObservableCollection<TerminalTabViewModel> LeftSplitTabs { get; } = [];
     public ObservableCollection<TerminalTabViewModel> RightSplitTabs { get; } = [];
@@ -119,12 +133,26 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public ICollectionView HostsView { get; }
     public ICollectionView ScriptsView { get; }
 
-    public GridLength ScriptCatalogPanelHeight => IsScriptCatalogExpanded
-        ? new GridLength(1, GridUnitType.Star)
-        : GridLength.Auto;
-    public GridLength RecentRunsPanelHeight => !IsRecentRunsExpanded
-        ? GridLength.Auto
-        : IsScriptCatalogExpanded ? new GridLength(180) : new GridLength(1, GridUnitType.Star);
+    private GridLength _scriptCatalogPanelHeight = new(2, GridUnitType.Star);
+    private GridLength _recentRunsPanelHeight = new(1, GridUnitType.Star);
+    public GridLength ScriptCatalogPanelHeight
+    {
+        get => IsScriptCatalogExpanded ? _scriptCatalogPanelHeight : GridLength.Auto;
+        set
+        {
+            if (value.IsStar && value.Value > 0)
+                _scriptCatalogPanelHeight = value;
+        }
+    }
+    public GridLength RecentRunsPanelHeight
+    {
+        get => IsRecentRunsExpanded ? _recentRunsPanelHeight : GridLength.Auto;
+        set
+        {
+            if (value.IsStar && value.Value > 0)
+                _recentRunsPanelHeight = value;
+        }
+    }
     public GridLength ScriptCatalogListHeight => IsScriptCatalogExpanded
         ? new GridLength(1, GridUnitType.Star)
         : new GridLength(0);
@@ -133,6 +161,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         : new GridLength(0);
     public string ScriptCatalogToggleLabel => IsScriptCatalogExpanded ? "[ − ]" : "[ + ]";
     public string RecentRunsToggleLabel => IsRecentRunsExpanded ? "[ − ]" : "[ + ]";
+    public string ScriptFolderPathDisplay => string.IsNullOrWhiteSpace(ScriptFolderPath) ? "/ (根目录)" : $"/ {ScriptFolderPath}";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(EditHostCommand))]
@@ -141,6 +170,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ForgetCredentialCommand))]
     [NotifyCanExecuteChangedFor(nameof(ConnectSftpCommand))]
     private HostProfile? selectedHost;
+
+    [ObservableProperty]
+    private HostCatalogNode? selectedHostCatalogNode;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenRemoteDirectoryCommand))]
@@ -227,6 +259,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     [ObservableProperty]
     private string scriptFolderPath = string.Empty;
+
+    partial void OnScriptFolderPathChanged(string value) => OnPropertyChanged(nameof(ScriptFolderPathDisplay));
 
     [ObservableProperty]
     private string scriptInputTemplate = string.Empty;
@@ -333,7 +367,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         PropertyChanged += (_, args) =>
         {
             if (!_loadingTerminalPreferences && args.PropertyName is nameof(TerminalFontFamily)
-                or nameof(TerminalFontSize) or nameof(TerminalScrollbackLines) or nameof(ConfirmMultiLinePaste))
+                or nameof(TerminalFontSize) or nameof(TerminalScrollbackLines) or nameof(ConfirmMultiLinePaste)
+                or nameof(AppearanceTheme) or nameof(UiFontFamily) or nameof(UiFontSize))
                 SaveTerminalPreferences();
         };
         SyncOwner = _gitHubSync.SavedOwner ?? string.Empty;
@@ -396,6 +431,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             if (saved is null)
                 return;
 
+            AppearanceTheme = AppearanceThemes.Contains(saved.AppearanceTheme) ? saved.AppearanceTheme : "午夜暗色";
+            UiFontFamily = UiFontFamilies.Contains(saved.UiFontFamily) ? saved.UiFontFamily : "Segoe UI";
+            UiFontSize = UiFontSizes.Contains(saved.UiFontSize) ? saved.UiFontSize : 11;
             TerminalFontFamily = TerminalFontFamilies.Contains(saved.FontFamily) ? saved.FontFamily : "Cascadia Mono";
             TerminalFontSize = TerminalFontSizes.Contains(saved.FontSize) ? saved.FontSize : 14;
             TerminalScrollbackLines = TerminalScrollbackOptions.Contains(saved.ScrollbackLines) ? saved.ScrollbackLines : 10000;
@@ -415,7 +453,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
             Directory.CreateDirectory(directory);
             var temporaryPath = TerminalPreferencesPath + ".tmp";
             File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new TerminalPreferences(
-                TerminalFontFamily, TerminalFontSize, TerminalScrollbackLines, ConfirmMultiLinePaste)));
+                TerminalFontFamily, TerminalFontSize, TerminalScrollbackLines, ConfirmMultiLinePaste,
+                AppearanceTheme, UiFontFamily, UiFontSize)));
             File.Move(temporaryPath, TerminalPreferencesPath, overwrite: true);
         }
         catch (Exception exception)
@@ -424,7 +463,24 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
     }
 
-    private sealed record TerminalPreferences(string FontFamily, double FontSize, int ScrollbackLines, bool ConfirmMultiLinePaste);
+    [RelayCommand]
+    private void ResetAppearance()
+    {
+        AppearanceTheme = "午夜暗色";
+        UiFontFamily = "Segoe UI";
+        UiFontSize = 11;
+        TerminalFontFamily = "Cascadia Mono";
+        TerminalFontSize = 14;
+    }
+
+    private sealed record TerminalPreferences(
+        string FontFamily,
+        double FontSize,
+        int ScrollbackLines,
+        bool ConfirmMultiLinePaste,
+        string AppearanceTheme = "午夜暗色",
+        string UiFontFamily = "Segoe UI",
+        double UiFontSize = 11);
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -432,6 +488,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         Hosts.Clear();
         foreach (var item in items)
             Hosts.Add(item);
+        RebuildHostCatalogTree();
         StatusMessage = $"LOCAL / READY   ·   {HostCount} HOSTS";
     }
 
@@ -507,7 +564,11 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
     }
 
-    partial void OnHostFilterChanged(string value) => HostsView.Refresh();
+    partial void OnHostFilterChanged(string value)
+    {
+        HostsView.Refresh();
+        RebuildHostCatalogTree();
+    }
 
     partial void OnScriptSearchTextChanged(string value)
     {
@@ -540,6 +601,20 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         OnPropertyChanged(nameof(CredentialStatus));
         OnPropertyChanged(nameof(ScriptExecutionTargetDescription));
         ConnectSftpCommand.NotifyCanExecuteChanged();
+        if (value is not null)
+            SelectedHostCatalogNode = VisibleHostCatalogNodes.FirstOrDefault(node => node.Host?.Id == value.Id);
+        else if (SelectedHostCatalogNode?.Host is not null)
+            SelectedHostCatalogNode = null;
+    }
+
+    partial void OnSelectedHostCatalogNodeChanged(HostCatalogNode? value)
+    {
+        if (value?.Host is { } host && SelectedHost?.Id != host.Id)
+            SelectedHost = Hosts.FirstOrDefault(item => item.Id == host.Id) ?? host;
+        else if (value is { IsFolder: true } && SelectedHost is not null)
+            SelectedHost = null;
+        else if (value is null && SelectedHost is not null)
+            SelectedHost = null;
     }
 
     partial void OnActiveSectionChanged(string value)
@@ -785,13 +860,108 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         return host.Name.Contains(HostFilter, StringComparison.CurrentCultureIgnoreCase)
             || host.HostName.Contains(HostFilter, StringComparison.CurrentCultureIgnoreCase)
             || host.UserName.Contains(HostFilter, StringComparison.CurrentCultureIgnoreCase)
-            || (host.Group?.Contains(HostFilter, StringComparison.CurrentCultureIgnoreCase) ?? false);
+            || host.GroupLabel.Contains(HostFilter, StringComparison.CurrentCultureIgnoreCase);
     }
+
+    [RelayCommand]
+    private void ToggleHostGroup(HostCatalogNode? node)
+    {
+        if (node is not { IsFolder: true })
+            return;
+        node.IsExpanded = !node.IsExpanded;
+        RebuildVisibleHostCatalogNodes();
+    }
+
+    private void RebuildHostCatalogTree()
+    {
+        var expansion = EnumerateHostCatalogNodes(HostCatalogNodes)
+            .Where(node => node.IsFolder)
+            .ToDictionary(node => node.GroupPath, node => node.IsExpanded, StringComparer.OrdinalIgnoreCase);
+        HostCatalogNodes.Clear();
+        VisibleHostCatalogNodes.Clear();
+        var folders = new Dictionary<string, HostCatalogNode>(StringComparer.OrdinalIgnoreCase);
+        var query = HostFilter.Trim();
+        foreach (var host in Hosts.Where(host => MatchesHostSearch(host, query)))
+        {
+            var siblings = HostCatalogNodes;
+            var segments = NormalizeCatalogPath(host.Group ?? "未分组").Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var pathSegments = new List<string>();
+            foreach (var segment in segments)
+            {
+                pathSegments.Add(segment);
+                var path = string.Join('/', pathSegments);
+                if (!folders.TryGetValue(path, out var folder))
+                {
+                    folder = new HostCatalogNode(segment, path)
+                    {
+                        IsExpanded = query.Length > 0 || !expansion.TryGetValue(path, out var wasExpanded) || wasExpanded
+                    };
+                    folders.Add(path, folder);
+                    siblings.Add(folder);
+                }
+                siblings = folder.Children;
+            }
+            siblings.Add(new HostCatalogNode(host.Name, NormalizeCatalogPath(host.Group ?? "未分组"), host));
+        }
+        SortHostCatalogNodes(HostCatalogNodes);
+        RebuildVisibleHostCatalogNodes();
+        SelectedHostCatalogNode = VisibleHostCatalogNodes.FirstOrDefault(node => node.Host?.Id == SelectedHost?.Id);
+    }
+
+    private void RebuildVisibleHostCatalogNodes()
+    {
+        VisibleHostCatalogNodes.Clear();
+        AddVisibleHostNodes(HostCatalogNodes, 0);
+    }
+
+    private void AddVisibleHostNodes(IReadOnlyList<HostCatalogNode> siblings, int depth)
+    {
+        foreach (var node in siblings)
+        {
+            node.SetDepth(depth);
+            VisibleHostCatalogNodes.Add(node);
+            if (node.IsFolder && node.IsExpanded)
+                AddVisibleHostNodes(node.Children, depth + 1);
+        }
+    }
+
+    private bool MatchesHostSearch(HostProfile host, string query) => query.Length == 0
+        || host.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || host.HostName.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || host.UserName.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+        || host.GroupLabel.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+
+    private static IEnumerable<HostCatalogNode> EnumerateHostCatalogNodes(IEnumerable<HostCatalogNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in EnumerateHostCatalogNodes(node.Children))
+                yield return child;
+        }
+    }
+
+    private static void SortHostCatalogNodes(ObservableCollection<HostCatalogNode> nodes)
+    {
+        var sorted = nodes.OrderByDescending(node => node.IsFolder)
+            .ThenBy(node => node.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        nodes.Clear();
+        foreach (var node in sorted)
+        {
+            SortHostCatalogNodes(node.Children);
+            nodes.Add(node);
+        }
+    }
+
+    private static string NormalizeCatalogPath(string? path) => string.Join('/',
+        (path ?? "").Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(segment => segment is not "." and not ".."));
 
     [RelayCommand]
     private async Task AddHostAsync()
     {
-        var result = await _dialogs.EditAsync(null);
+        var result = await _dialogs.EditAsync(null, Hosts.Select(host => host.Group ?? "").Where(group => group.Length > 0).ToArray());
         if (result is null)
             return;
 
@@ -805,7 +975,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         if (SelectedHost is null)
             return;
 
-        var result = await _dialogs.EditAsync(SelectedHost);
+        var result = await _dialogs.EditAsync(SelectedHost, Hosts.Select(host => host.Group ?? "").Where(group => group.Length > 0).ToArray());
         if (result is null)
             return;
 
@@ -2200,6 +2370,30 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         {
             ScriptCenterStatus = "DELETE FAILED";
             await _syncInteraction.ShowErrorAsync("删除脚本失败", exception.Message);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteScriptRunAsync(ScriptRunLog? run)
+    {
+        if (run is null || !RecentScriptRuns.Contains(run))
+            return;
+
+        try
+        {
+            await _scriptCenterStore.DeleteRunAsync(run.Id);
+            var index = RecentScriptRuns.IndexOf(run);
+            RecentScriptRuns.RemoveAt(index);
+            if (ReferenceEquals(SelectedScriptRun, run))
+                SelectedScriptRun = RecentScriptRuns.Count > 0
+                    ? RecentScriptRuns[Math.Min(index, RecentScriptRuns.Count - 1)]
+                    : null;
+            ScriptCenterStatus = $"RUN DELETED / {run.ScriptName} / {run.StartedAt.LocalDateTime:HH:mm:ss}";
+        }
+        catch (Exception exception)
+        {
+            ScriptCenterStatus = "DELETE RUN FAILED";
+            await _syncInteraction.ShowErrorAsync("删除运行记录失败", exception.Message);
         }
     }
 
