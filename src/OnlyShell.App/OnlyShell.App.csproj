@@ -5,6 +5,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>OnlyShell</AssemblyName>
     <RootNamespace>OnlyShell.App</RootNamespace>
+    <StartupObject>OnlyShell.App.Program</StartupObject>
     <ApplicationIcon>Assets\OnlyShell.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
@@ -19,5 +20,6 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="AvalonEdit" />
+    <PackageReference Include="Velopack" />
   </ItemGroup>
 </Project>

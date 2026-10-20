@@ -44,7 +44,7 @@ dotnet run --project src/OnlyShell.App/OnlyShell.App.csproj
 .\scripts\publish-windows.ps1
 ```
 
-输出位于 `artifacts\publish\win-x64\` 和 `artifacts\OnlyShell-win-x64.zip`。当前发布脚本生成自包含应用目录，不会创建安装程序，也不会进行代码签名或自动更新。
+输出位于 `artifacts\publish\win-x64\` 和 `artifacts\OnlyShell-win-x64.zip`。正式安装包和更新发布说明见 [`docs/发布Windows版本.md`](docs/发布Windows版本.md)。推送 `v*` 标签后，GitHub Actions 会构建自包含版与依赖 .NET Runtime 版，并创建对应的 Releases；安装器提供安装目录选择，安装后的更新由 Velopack 管理。目前发布资产未进行代码签名。
 
 应用数据保存在 `%LOCALAPPDATA%\OnlyShell\`，包括 SQLite 主机数据库和同步设置；访问令牌本身保存在 Windows 凭据管理器。
 
@@ -83,7 +83,7 @@ docs/                                工程基线与实现规划
 
 ## 已知限制
 
-- 当前只支持 Windows 桌面端；提供免安装发布包，不提供安装程序、代码签名或自动更新。
+- 当前只支持 Windows 桌面端；提供免安装发布包，并配置正式安装器与 GitHub Releases 自动更新工作流。发布资产暂未进行代码签名。
 - SSH 终端断线重连会保留当前窗口缓冲区，但不会恢复远端 shell 进程或重放命令。
 - 工作区恢复只保存标签类型、SSH 主机 ID、本地 shell 类型、初始工作目录、选中标签和当前页面。重启后本地 shell 是新进程，SSH 需手动重连；命令历史、进程状态和终端缓冲区不会恢复。
 - SFTP 递归传输遇到符号链接时会跳过链接，避免意外跟随到其他目录。

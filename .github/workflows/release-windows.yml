@@ -1,0 +1,120 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Velopack CLI and Inno Setup
+        shell: pwsh
+        run: |
+          dotnet tool install --global vpk --version 1.2.0
+          "${env:USERPROFILE}\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          choco install innosetup --yes --no-progress
+
+      - name: Read release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Tag must use semantic versioning, for example v1.2.3. Received: $env:GITHUB_REF_NAME"
+          }
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish self-contained application
+        shell: pwsh
+        run: >-
+          dotnet publish src/OnlyShell.App/OnlyShell.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          --output artifacts/publish/self-contained
+          -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Publish framework-dependent application
+        shell: pwsh
+        run: >-
+          dotnet publish src/OnlyShell.App/OnlyShell.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output artifacts/publish/framework-dependent
+          -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Package self-contained release
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $channel = "win-x64-self-contained"
+          $packId = "OnlyShellSelfContained"
+          $output = "artifacts/velopack/self-contained"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $previousRelease = gh release list --repo $env:REPOSITORY --json tagName --jq '.[].tagName' | Where-Object { $_ -match '-self-contained$' } | Select-Object -First 1
+          if ($previousRelease) {
+            vpk download github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output
+            if ($LASTEXITCODE -ne 0) { throw "Could not download the previous $channel release" }
+          }
+          vpk pack --packId $packId --packTitle OnlyShell --packVersion $env:VERSION --packDir artifacts/publish/self-contained --mainExe OnlyShell.exe --channel $channel --outputDir $output --icon src/OnlyShell.App/Assets/OnlyShell.ico
+          $setup = (Resolve-Path "$output/$packId-$channel-Setup.exe").Path
+          $env:APP_VERSION = $env:VERSION
+          $env:VARIANT_NAME = "SelfContained"
+          $env:VPK_SETUP_PATH = $setup
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="$env:APP_VERSION" /DVariantName="$env:VARIANT_NAME" /DVpkSetupPath="$env:VPK_SETUP_PATH" installer/OnlyShell.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          Remove-Item -LiteralPath $setup -Force
+          $tag = "v$env:VERSION-self-contained"
+          vpk upload github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output --publish --tag $tag --targetCommitish $env:GITHUB_SHA --releaseName "OnlyShell $env:VERSION (Self-contained)"
+          gh release upload $tag "artifacts/setup/OnlyShell-SelfContained-$env:VERSION-Setup.exe" --repo $env:REPOSITORY --clobber
+
+      - name: Package framework-dependent release
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $channel = "win-x64-framework-dependent"
+          $packId = "OnlyShellFrameworkDependent"
+          $output = "artifacts/velopack/framework-dependent"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $previousRelease = gh release list --repo $env:REPOSITORY --json tagName --jq '.[].tagName' | Where-Object { $_ -match '-framework-dependent$' } | Select-Object -First 1
+          if ($previousRelease) {
+            vpk download github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output
+            if ($LASTEXITCODE -ne 0) { throw "Could not download the previous $channel release" }
+          }
+          vpk pack --packId $packId --packTitle OnlyShell --packVersion $env:VERSION --packDir artifacts/publish/framework-dependent --mainExe OnlyShell.exe --channel $channel --outputDir $output --icon src/OnlyShell.App/Assets/OnlyShell.ico --framework net10.0-x64-desktop
+          $setup = (Resolve-Path "$output/$packId-$channel-Setup.exe").Path
+          $env:APP_VERSION = $env:VERSION
+          $env:VARIANT_NAME = "FrameworkDependent"
+          $env:VPK_SETUP_PATH = $setup
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="$env:APP_VERSION" /DVariantName="$env:VARIANT_NAME" /DVpkSetupPath="$env:VPK_SETUP_PATH" installer/OnlyShell.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          Remove-Item -LiteralPath $setup -Force
+          $tag = "v$env:VERSION-framework-dependent"
+          vpk upload github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output --publish --tag $tag --targetCommitish $env:GITHUB_SHA --releaseName "OnlyShell $env:VERSION (.NET Desktop Runtime required)"
+          gh release upload $tag "artifacts/setup/OnlyShell-FrameworkDependent-$env:VERSION-Setup.exe" --repo $env:REPOSITORY --clobber

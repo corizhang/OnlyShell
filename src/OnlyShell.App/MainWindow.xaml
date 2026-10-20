@@ -173,12 +173,12 @@
                     </Border>
                     <Border Visibility="{Binding IsSettingsWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Background="{DynamicResource Brush.Surface}" Padding="18">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+                            <StackPanel HorizontalAlignment="Stretch">
                                 <TextBlock Text="// APPEARANCE_AND_TERMINAL" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
                                 <TextBlock Text="外观与终端设置" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,6,0,4" />
                                 <TextBlock Text="外观调整即时生效，并保存在本机。颜色使用经过校验的主题预设，避免单独修改设计 token 导致界面失衡。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" TextWrapping="Wrap" Margin="0,0,0,14" />
                                 <Grid Margin="0,0,0,16">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="240"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="2*"/><ColumnDefinition Width="3*"/></Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <TextBlock Grid.Row="0" Text="主题配色" Foreground="{DynamicResource Brush.Text.Primary}" VerticalAlignment="Center" Margin="0,0,10,9" />
                                     <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding AppearanceThemes}" SelectedItem="{Binding AppearanceTheme, Mode=TwoWay}" Margin="0,0,0,9" Padding="{StaticResource Space.Input.Padding}" />
@@ -337,7 +337,7 @@
                     </Border>
                     <Grid Visibility="{Binding IsSyncWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel MaxWidth="780" HorizontalAlignment="Left">
+                            <StackPanel HorizontalAlignment="Stretch">
                                 <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="14" Margin="0,0,0,10">
                                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <StackPanel><TextBlock Text="// GITHUB_DEVICE_FLOW" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}"/><TextBlock Text="{Binding SyncStatus}" Foreground="{DynamicResource Brush.Status.Success}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.BodyLarge}" Margin="0,7,0,0"/><TextBlock Text="令牌保存在本机 Windows 凭据管理器；不会上传 SSH 密码或私钥。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Small}" Margin="0,6,0,0"/></StackPanel>

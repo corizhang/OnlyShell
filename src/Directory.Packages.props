@@ -11,5 +11,6 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
     <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageVersion Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 </Project>

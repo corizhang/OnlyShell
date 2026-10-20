@@ -15,6 +15,8 @@ using OnlyShell.Infrastructure.Ssh;
 using OnlyShell.Presentation.ViewModels;
 using OnlyShell.Presentation.Services;
 using OnlyShell.Terminal;
+using Velopack;
+using Velopack.Sources;
 
 namespace OnlyShell.App;
 
@@ -64,6 +66,7 @@ public partial class App : Application
             var window = _applicationHost.Services.GetRequiredService<MainWindow>();
             MainWindow = window;
             window.Show();
+            _ = CheckForApplicationUpdatesAsync();
         }
         catch (Exception exception)
         {
@@ -98,4 +101,78 @@ public partial class App : Application
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "OnlyShell",
         "onlyshell.db");
+
+    private static async Task CheckForApplicationUpdatesAsync()
+    {
+        try
+        {
+            var manager = new UpdateManager(new GithubSource("https://github.com/corizhang/OnlyShell", null, prerelease: false));
+            if (!manager.IsInstalled || !IsApplicationUpdateCheckDue())
+                return;
+
+            var update = await manager.CheckForUpdatesAsync();
+            RecordApplicationUpdateCheck();
+            if (update is null)
+                return;
+
+            var version = update.TargetFullRelease.Version.ToString();
+            var choice = MessageBox.Show(
+                $"发现 OnlyShell 新版本 {version}，是否现在下载并重启完成更新？",
+                "OnlyShell / Update",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (choice != MessageBoxResult.Yes)
+                return;
+
+            await manager.DownloadUpdatesAsync(update);
+            manager.ApplyUpdatesAndRestart(update);
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("UPDATE", "Could not check for or apply application updates.", exception);
+        }
+    }
+
+    private static bool IsApplicationUpdateCheckDue()
+    {
+        var checkPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OnlyShell",
+            "last-update-check.txt");
+
+        try
+        {
+            if (File.Exists(checkPath)
+                && DateTimeOffset.TryParse(File.ReadAllText(checkPath), out var lastCheck)
+                && DateTimeOffset.UtcNow - lastCheck < TimeSpan.FromHours(24))
+            {
+                return false;
+            }
+
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("UPDATE", "Could not read the update check time; continuing with the check.", exception);
+        }
+
+        return true;
+    }
+
+    private static void RecordApplicationUpdateCheck()
+    {
+        var checkPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "OnlyShell",
+            "last-update-check.txt");
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(checkPath)!);
+            File.WriteAllText(checkPath, DateTimeOffset.UtcNow.ToString("O"));
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("UPDATE", "Could not persist the update check time.", exception);
+        }
+    }
 }
