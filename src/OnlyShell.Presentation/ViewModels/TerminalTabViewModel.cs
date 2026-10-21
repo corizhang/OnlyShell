@@ -46,8 +46,11 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
         "cmd" => "Command Prompt",
         _ => "PowerShell"
     };
-    public bool CanReconnect => !IsNewTab && Status != "CONNECTED" && (Kind == TerminalSessionKind.Local || Host is not null);
+    public bool CanReconnect => !IsNewTab && Status is not ("CONNECTED" or "CONNECTING") && (Kind == TerminalSessionKind.Local || Host is not null);
     public bool IsSessionMissing => Session is null;
+    public bool IsConnecting => Status == "CONNECTING";
+    public string ConnectionPanelTitle => IsConnecting ? "连接服务器..." : Status.Contains("FAILED", StringComparison.Ordinal) ? "服务器连接失败" : "服务器未连接";
+    public string ConnectionPanelDescription => IsConnecting ? "正在建立 SSH 会话，请稍候。" : "可以点击上方 REOPEN 重试连接。";
     public bool IsRemoteMetricsVisible => Kind == TerminalSessionKind.Ssh && Host is not null;
     public string CpuMetricText => Metrics?.CpuPercent is { } cpu ? $"{cpu:F1}%" : "--";
     public string MemoryMetricText => Metrics is { } metrics ? $"{metrics.MemoryUsedMiB:F0} / {metrics.MemoryTotalMiB:F0} MiB  ·  {metrics.MemoryPercent:F1}%" : "--";
@@ -143,6 +146,8 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
         }
     }
 
+    public void SetConnectionStatus(string status) => SetStatus(status);
+
     [ObservableProperty]
     private ITerminalSession? session;
 
@@ -206,6 +211,9 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IAsyncDispo
     {
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(CanReconnect));
+        OnPropertyChanged(nameof(IsConnecting));
+        OnPropertyChanged(nameof(ConnectionPanelTitle));
+        OnPropertyChanged(nameof(ConnectionPanelDescription));
         if (Kind == TerminalSessionKind.Ssh && value != "CONNECTED")
             MetricsStatus = "SSH / DISCONNECTED";
     }

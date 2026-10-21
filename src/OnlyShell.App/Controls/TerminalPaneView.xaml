@@ -55,7 +55,9 @@
             <Button Content="↓" Click="NextMatch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="7,1" Margin="0,0,3,0" ToolTip="下一个匹配项" />
             <Button Content="×" Click="CloseSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" Padding="6,1" ToolTip="关闭搜索 (Esc)" />
         </DockPanel>
-        <vt:TerminalControl x:Name="Terminal" Grid.Row="2" Session="{Binding Session}" AllowDirectInput="True" ConfirmMultiLinePaste="{Binding DataContext.ConfirmMultiLinePaste, RelativeSource={RelativeSource AncestorType=Window}}" ScrollbackLines="{Binding DataContext.TerminalScrollbackLines, RelativeSource={RelativeSource AncestorType=Window}}" ScrollDownVisible="True" Background="{DynamicResource Brush.Surface.Terminal}" Foreground="{DynamicResource Brush.Text.Terminal}" FontFamily="{Binding DataContext.TerminalFontFamily, RelativeSource={RelativeSource AncestorType=Window}}" FontSize="{Binding DataContext.TerminalFontSize, RelativeSource={RelativeSource AncestorType=Window}}">
+        <Grid Grid.Row="2" x:Name="TerminalArea">
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <vt:TerminalControl x:Name="Terminal" Grid.Row="0" Session="{Binding Session}" AllowDirectInput="True" ConfirmMultiLinePaste="{Binding DataContext.ConfirmMultiLinePaste, RelativeSource={RelativeSource AncestorType=Window}}" ScrollbackLines="{Binding DataContext.TerminalScrollbackLines, RelativeSource={RelativeSource AncestorType=Window}}" ScrollDownVisible="True" Background="{DynamicResource Brush.Surface.Terminal}" Foreground="{DynamicResource Brush.Text.Terminal}" FontFamily="{Binding DataContext.TerminalFontFamily, RelativeSource={RelativeSource AncestorType=Window}}" FontSize="{Binding DataContext.TerminalFontSize, RelativeSource={RelativeSource AncestorType=Window}}">
             <vt:TerminalControl.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="复制选中内容    Ctrl+Shift+C" Command="{x:Static vt:TerminalControl.CopyCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -67,19 +69,7 @@
                 </ContextMenu>
             </vt:TerminalControl.ContextMenu>
         </vt:TerminalControl>
-        <Popup x:Name="SelectionToolbarPopup" Grid.Row="2" PlacementTarget="{Binding ElementName=Terminal}" Placement="RelativePoint" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-            <Border Background="{DynamicResource Brush.Surface.TerminalPopup}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="3" Padding="3">
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="复制" Click="CopySelection_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="复制选中内容 (Ctrl+Shift+C)" />
-                    <Button Content="粘贴" Click="PasteFromToolbar_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="粘贴剪贴板内容 (Ctrl+Shift+V；Ctrl+V 也可用)" />
-                    <Button Content="查找" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="查找终端内容 (Ctrl+F)" />
-                </StackPanel>
-            </Border>
-        </Popup>
-        <Border Grid.Row="2" Visibility="{Binding IsSessionMissing, Converter={StaticResource BooleanToVisibilityConverter}}" Background="{DynamicResource Brush.Surface.Terminal}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="// SESSION_RESTORED / NOT_CONNECTED" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" HorizontalAlignment="Center"/><TextBlock Text="点击上方 REOPEN 重新建立终端会话。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.LG}"/></StackPanel>
-        </Border>
-        <Grid Grid.Row="2" Margin="0,0,0,12" VerticalAlignment="Bottom" IsHitTestVisible="True" Visibility="{Binding IsSessionMissing, Converter={StaticResource InverseBooleanConverter}}">
+        <Grid Grid.Row="1" Margin="0,0,0,12" VerticalAlignment="Center" IsHitTestVisible="True" Visibility="{Binding IsSessionMissing, Converter={StaticResource InverseBooleanConverter}}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="19*"/><ColumnDefinition Width="62*"/><ColumnDefinition Width="19*"/></Grid.ColumnDefinitions>
             <Border Grid.Column="1" Background="{DynamicResource Brush.Surface.TerminalToolbar}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="4" Padding="4,3" HorizontalAlignment="Stretch">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -91,6 +81,19 @@
                 </StackPanel>
             </Border>
         </Grid>
+        </Grid>
+        <Popup x:Name="SelectionToolbarPopup" Grid.Row="2" PlacementTarget="{Binding ElementName=Terminal}" Placement="RelativePoint" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="{DynamicResource Brush.Surface.TerminalPopup}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="3" Padding="3">
+                <StackPanel Orientation="Horizontal">
+                    <Button Click="CopySelection_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="复制选中内容"><StackPanel Orientation="Horizontal"><TextBlock Text="复制"/><TextBlock Text="  Ctrl+Shift+C" Foreground="{DynamicResource Brush.Text.Secondary}" Margin="6,0,0,0"/></StackPanel></Button>
+                    <Button Click="PasteFromToolbar_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="粘贴剪贴板内容"><StackPanel Orientation="Horizontal"><TextBlock Text="粘贴"/><TextBlock Text="  Ctrl+Shift+V" Foreground="{DynamicResource Brush.Text.Secondary}" Margin="6,0,0,0"/></StackPanel></Button>
+                    <Button Content="查找" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="查找终端内容 (Ctrl+F)" />
+                </StackPanel>
+            </Border>
+        </Popup>
+        <Border Grid.Row="2" Visibility="{Binding IsSessionMissing, Converter={StaticResource BooleanToVisibilityConverter}}" Background="{DynamicResource Brush.Surface.Terminal}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="{Binding ConnectionPanelTitle}" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.HeadingSmall}" HorizontalAlignment="Center"/><TextBlock Text="{Binding ConnectionPanelDescription}" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" Margin="{StaticResource Space.Gap.Top.LG}"/></StackPanel>
+        </Border>
         <Popup x:Name="GitMenuPopup" Placement="Top" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
             <Border Background="{DynamicResource Brush.Surface.TerminalPopup}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="5" Padding="5">
                 <Border.Effect>

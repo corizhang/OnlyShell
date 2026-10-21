@@ -1,0 +1,23 @@
+<Window x:Class="OnlyShell.App.ConfirmationDialogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="OnlyShell / Confirm" Width="430" SizeToContent="Height" MinWidth="{StaticResource Dialog.MinWidth.Compact}"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False" WindowStyle="None"
+        Background="{DynamicResource Brush.Canvas}" Foreground="{DynamicResource Brush.Text.Primary}"
+        FontFamily="{DynamicResource Font.Window}">
+    <Border BorderBrush="{DynamicResource Brush.Border.Dialog}" BorderThickness="1" Background="{DynamicResource Brush.Surface}" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,12" LastChildFill="False" MouseLeftButtonDown="DialogHeader_MouseLeftButtonDown">
+                <TextBlock x:Name="EyebrowText" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" VerticalAlignment="Center" />
+                <Button DockPanel.Dock="Right" Content="×" Click="Cancel_Click" Width="24" Height="24" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderThickness="0" FontSize="16" Padding="0" />
+            </DockPanel>
+            <TextBlock x:Name="HeadingText" Grid.Row="1" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,10,0,4" />
+            <TextBlock x:Name="MessageText" Grid.Row="2" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" TextWrapping="Wrap" Margin="0,0,0,18" />
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="取消 [ ESC ]" IsCancel="True" MinWidth="96" Margin="0,0,8,0" Padding="{StaticResource Space.Button.Padding}" Background="Transparent" Foreground="{DynamicResource Brush.Text.Secondary}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" />
+                <Button x:Name="ConfirmButton" IsDefault="True" Click="Confirm_Click" MinWidth="96" Padding="{StaticResource Space.Button.Padding}" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

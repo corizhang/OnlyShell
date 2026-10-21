@@ -153,7 +153,15 @@ public partial class TerminalPaneView : UserControl
 
     private void CopySelection_Click(object sender, RoutedEventArgs e)
     {
-        Terminal.CopySelectionToClipboard();
+        try
+        {
+            Terminal.CopySelectionToClipboard();
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("TERMINAL", "Could not copy selected terminal text to the clipboard.", exception);
+            MessageBox.Show(Window.GetWindow(this), "复制终端内容失败，请检查剪贴板是否被其他程序占用。", "OnlyShell / Clipboard", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         SelectionToolbarPopup.IsOpen = false;
     }
 

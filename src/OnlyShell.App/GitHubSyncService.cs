@@ -40,6 +40,21 @@ public sealed class GitHubSyncService(
         await ReplaceTokenAsync(token, cancellationToken);
     }
 
+    public async Task<string?> GetPassphraseForPushAsync(CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.PassphraseReference))
+        {
+            var savedPassphrase = await credentials.ReadAsync(_settings.PassphraseReference, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(savedPassphrase))
+                return await interaction.ConfirmUseSavedPassphraseAsync() ? savedPassphrase : null;
+
+            SaveSettings(_settings with { PassphraseReference = null });
+        }
+
+        var passphrase = await interaction.RequestPassphraseAsync(confirm: true);
+        return passphrase;
+    }
+
     public async Task PushAsync(string owner, string repository, string branch, string passphrase, CancellationToken cancellationToken = default)
     {
         ValidateRepository(owner, repository, branch);
@@ -48,6 +63,7 @@ public sealed class GitHubSyncService(
         var current = await provider.DownloadAsync(cancellationToken);
         if (current is not null)
             _ = UnprotectPayload(current.Payload, passphrase);
+        await EnsurePassphraseStoredAsync(passphrase, cancellationToken);
         var serialized = SyncConfigurationSerializer.Serialize(await hosts.ListAsync(cancellationToken));
         var encrypted = new AesGcmSyncPayloadProtector().Protect(serialized, passphrase);
         await provider.UploadAsync(new SyncSnapshot(1, encrypted, null, DateTimeOffset.UtcNow), _settings.Version, cancellationToken);
@@ -64,6 +80,7 @@ public sealed class GitHubSyncService(
             ?? throw new InvalidOperationException("指定仓库中还没有 OnlyShell 配置。请先在已有设备上执行上传。");
         var clear = UnprotectPayload(snapshot.Payload, passphrase);
         var remote = SyncConfigurationSerializer.Deserialize(clear);
+        await EnsurePassphraseStoredAsync(passphrase, cancellationToken);
         var merged = SyncConfigurationSerializer.MergeDeviceSecrets(remote, await hosts.ListAsync(cancellationToken));
         SaveSettings(_settings with { Owner = owner.Trim(), Repository = repository.Trim(), Branch = branch.Trim(), Version = snapshot.Version });
         return merged;
@@ -133,6 +150,41 @@ public sealed class GitHubSyncService(
         }
     }
 
+    private async Task SavePassphraseAsync(string passphrase, CancellationToken cancellationToken)
+    {
+        var previousReference = _settings.PassphraseReference;
+        var nextReference = await credentials.StoreAsync(passphrase, cancellationToken);
+        var updated = _settings with { PassphraseReference = nextReference };
+        try
+        {
+            SaveSettings(updated);
+        }
+        catch
+        {
+            try { await credentials.DeleteAsync(nextReference, cancellationToken); }
+            catch { /* Preserve the original persistence failure. */ }
+            throw;
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousReference) && previousReference != nextReference)
+        {
+            try { await credentials.DeleteAsync(previousReference, cancellationToken); }
+            catch (Exception exception) { Debug.WriteLine($"Could not remove replaced sync passphrase: {exception.Message}"); }
+        }
+    }
+
+    private async Task EnsurePassphraseStoredAsync(string passphrase, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.PassphraseReference))
+        {
+            var savedPassphrase = await credentials.ReadAsync(_settings.PassphraseReference, cancellationToken);
+            if (string.Equals(savedPassphrase, passphrase, StringComparison.Ordinal))
+                return;
+        }
+
+        await SavePassphraseAsync(passphrase, cancellationToken);
+    }
+
     private static string UnprotectPayload(string payload, string passphrase)
     {
         try { return new AesGcmSyncPayloadProtector().Unprotect(payload, passphrase); }
@@ -160,7 +212,7 @@ public sealed class GitHubSyncService(
         }
     }
 
-    private sealed record SyncSettings(string? Owner = null, string? Repository = null, string? Branch = "main", string? TokenReference = null, string? Version = null);
+    private sealed record SyncSettings(string? Owner = null, string? Repository = null, string? Branch = "main", string? TokenReference = null, string? Version = null, string? PassphraseReference = null);
 }
 
 public sealed class WpfSyncInteractionService : ISyncInteractionService
@@ -174,8 +226,22 @@ public sealed class WpfSyncInteractionService : ISyncInteractionService
 
     public Task<string?> RequestPassphraseAsync(bool confirm)
     {
-        var window = new SyncPromptWindow("配置加密口令", confirm ? "设置一个至少 12 位的同步加密口令。此口令不会上传或保存在本机。" : "输入此配置对应的同步加密口令。", true, confirm) { Owner = System.Windows.Application.Current.MainWindow };
+        var window = new SyncPromptWindow("配置加密口令", confirm ? "首次设置至少 12 位的同步加密口令。口令将保存在当前 Windows 用户的凭据管理器中，不会上传；其他设备需要输入相同口令。" : "输入此配置对应的同步加密口令。", true, confirm) { Owner = System.Windows.Application.Current.MainWindow };
         return Task.FromResult(window.ShowDialog() == true ? window.Secret : null);
+    }
+
+    public Task<bool> ConfirmUseSavedPassphraseAsync()
+    {
+        var dialog = new ConfirmationDialogWindow(
+            "SYNC / SAVED_PASSPHRASE",
+            "使用本机已保存口令？",
+            "将使用此设备 Windows 凭据管理器中保存的口令加密配置并推送到 GitHub。",
+            "继续推送",
+            destructive: false)
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+        return Task.FromResult(dialog.ShowDialog() == true);
     }
 
     public Task<bool> ConfirmImportAsync(int remoteHostCount, int localHostCount)

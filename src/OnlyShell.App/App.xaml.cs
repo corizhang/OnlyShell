@@ -17,12 +17,27 @@ using OnlyShell.Presentation.Services;
 using OnlyShell.Terminal;
 using Velopack;
 using Velopack.Sources;
+using System.Reflection;
 
 namespace OnlyShell.App;
 
 public partial class App : Application
 {
     private IHost? _applicationHost;
+
+    public static string ProductVersion
+    {
+        get
+        {
+            var version = typeof(App).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(version))
+                version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+            var metadataSeparator = version.IndexOf('+');
+            return $"v{(metadataSeparator >= 0 ? version[..metadataSeparator] : version)}";
+        }
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {

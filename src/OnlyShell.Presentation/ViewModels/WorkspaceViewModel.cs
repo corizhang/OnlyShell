@@ -1021,6 +1021,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         var host = SelectedHost;
         if (host is null || string.IsNullOrWhiteSpace(host.CredentialReference))
             return;
+        if (!await _dialogs.ConfirmForgetCredentialAsync(host))
+            return;
 
         try
         {
@@ -1063,7 +1065,41 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         if (host is null)
             return;
 
+        var connectingTab = new TerminalTabViewModel(host, null, TerminalSessionKind.Ssh);
+        connectingTab.SetConnectionStatus("CONNECTING");
+        TerminalTabViewModel? replacedPlaceholder = null;
+        var replacedPlaceholderIndex = -1;
+        if (splitPlaceholder is not null && splitPaneTabs is not null)
+        {
+            var splitIndex = splitPaneTabs.IndexOf(splitPlaceholder);
+            if (splitIndex < 0)
+                return;
+            splitPaneTabs[splitIndex] = connectingTab;
+            if (ReferenceEquals(splitPaneTabs, LeftSplitTabs))
+                LeftSplitSelectedTab = connectingTab;
+            else
+                SplitSecondaryTab = connectingTab;
+            TerminalTabs.Add(connectingTab);
+            replacedPlaceholder = splitPlaceholder;
+            replacedPlaceholderIndex = splitIndex;
+        }
+        else
+        {
+            replacedPlaceholder = SelectedTerminalTab is { IsNewTab: true } newTab ? newTab : null;
+            if (replacedPlaceholder is not null)
+            {
+                replacedPlaceholderIndex = TerminalTabs.IndexOf(replacedPlaceholder);
+                TerminalTabs[replacedPlaceholderIndex] = connectingTab;
+            }
+            else
+            {
+                TerminalTabs.Add(connectingTab);
+            }
+            SelectedTerminalTab = connectingTab;
+        }
+        ActiveSection = "终端";
         StatusMessage = $"SSH / CONNECTING   ·   {host.HostName}:{host.Port}";
+        await Dispatcher.Yield(DispatcherPriority.ContextIdle);
         try
         {
             var (session, credential) = await ConnectWithCredentialFallbackAsync(
@@ -1071,39 +1107,35 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 (secret, token) => _sshConnector.ConnectAsync(host, secret, token),
                 message => _dialogs.ShowErrorAsync(message));
             if (session is null || credential is null)
+            {
+                await RemoveConnectingTabAsync(connectingTab, replacedPlaceholder, replacedPlaceholderIndex, splitPaneTabs);
+                StatusMessage = $"SSH / CONNECTION CANCELLED   ·   {host.HostName}:{host.Port}";
                 return;
+            }
+
+            if (!TerminalTabs.Contains(connectingTab))
+            {
+                session.Dispose();
+                return;
+            }
 
             var secret = credential.Secret;
-
-            var tab = new TerminalTabViewModel(host, session);
+            await connectingTab.ReplaceSessionAsync(session);
             if (splitPlaceholder is not null && splitPaneTabs is not null)
             {
-                var index = splitPaneTabs.IndexOf(splitPlaceholder);
-                if (index >= 0)
-                    splitPaneTabs[index] = tab;
+                if (replacedPlaceholder is not null)
+                    await replacedPlaceholder.DisposeAsync();
                 if (ReferenceEquals(splitPaneTabs, LeftSplitTabs))
-                    LeftSplitSelectedTab = tab;
+                    LeftSplitSelectedTab = connectingTab;
                 else
-                    SplitSecondaryTab = tab;
-                TerminalTabs.Add(tab);
-                await splitPlaceholder.DisposeAsync();
+                    SplitSecondaryTab = connectingTab;
             }
             else
             {
-                var placeholder = SelectedTerminalTab is { IsNewTab: true } ? SelectedTerminalTab : null;
-                if (placeholder is not null)
-                {
-                    var index = TerminalTabs.IndexOf(placeholder);
-                    TerminalTabs[index] = tab;
-                    await placeholder.DisposeAsync();
-                }
-                else
-                {
-                    TerminalTabs.Add(tab);
-                }
-                SelectedTerminalTab = tab;
+                if (replacedPlaceholder is not null)
+                    await replacedPlaceholder.DisposeAsync();
+                SelectedTerminalTab = connectingTab;
             }
-            ActiveSection = "终端";
             StatusMessage = $"SSH / CONNECTED   ·   {host.HostName}:{host.Port}";
             await TryConnectSftpForSshAsync(host, credential.Secret);
 
@@ -1146,15 +1178,48 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         }
         catch (Exception exception)
         {
+            connectingTab.SetConnectionStatus("CONNECTION FAILED");
             StatusMessage = $"SSH / FAILED   ·   {host.HostName}:{host.Port}";
             await _dialogs.ShowErrorAsync($"无法连接到 {host.Name}。\n\n{exception.Message}");
         }
+    }
+
+    private async Task RemoveConnectingTabAsync(
+        TerminalTabViewModel connectingTab,
+        TerminalTabViewModel? replacedPlaceholder,
+        int replacedPlaceholderIndex,
+        ObservableCollection<TerminalTabViewModel>? splitPaneTabs)
+    {
+        TerminalTabs.Remove(connectingTab);
+        if (splitPaneTabs is not null)
+        {
+            var index = splitPaneTabs.IndexOf(connectingTab);
+            if (index >= 0 && replacedPlaceholder is not null)
+                splitPaneTabs[index] = replacedPlaceholder;
+            if (ReferenceEquals(splitPaneTabs, LeftSplitTabs))
+                LeftSplitSelectedTab = replacedPlaceholder;
+            else
+                SplitSecondaryTab = replacedPlaceholder;
+        }
+        else if (replacedPlaceholder is not null && replacedPlaceholderIndex >= 0)
+        {
+            TerminalTabs[replacedPlaceholderIndex] = replacedPlaceholder;
+            SelectedTerminalTab = replacedPlaceholder;
+        }
+        else if (ReferenceEquals(SelectedTerminalTab, connectingTab))
+        {
+            SelectedTerminalTab = TerminalTabs.LastOrDefault(item => !item.IsNewTab);
+        }
+
+        await connectingTab.DisposeAsync();
     }
 
     [RelayCommand]
     private async Task CloseTerminalAsync(TerminalTabViewModel? tab)
     {
         if (tab is null)
+            return;
+        if (!await _dialogs.ConfirmCloseTerminalAsync(tab.DisplayName))
             return;
 
         var wasSelected = ReferenceEquals(SelectedTerminalTab, tab);
@@ -1196,6 +1261,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
         var host = tab.Host;
         if (host is null)
             return;
+        tab.SetConnectionStatus("CONNECTING");
         StatusMessage = $"SSH / RECONNECTING   ·   {host.HostName}:{host.Port}";
         SecureShellSession session;
         ConnectionCredential credential;
@@ -1206,12 +1272,16 @@ public sealed partial class WorkspaceViewModel : ObservableObject
                 (secret, token) => _sshConnector.ConnectAsync(host, secret, token),
                 message => _dialogs.ShowErrorAsync(message));
             if (connection.Connection is null || connection.Credential is null)
+            {
+                tab.SetConnectionStatus("RESTORED / DISCONNECTED");
                 return;
+            }
             session = connection.Connection;
             credential = connection.Credential;
         }
         catch (Exception exception)
         {
+            tab.SetConnectionStatus("CONNECTION FAILED");
             StatusMessage = $"SSH / RECONNECT FAILED   ·   {host.HostName}:{host.Port}";
             await _dialogs.ShowErrorAsync($"无法重新连接到 {host.Name}。\n\n{exception.Message}");
             return;
@@ -2160,13 +2230,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     {
         if (IsSyncBusy)
             return;
-        var passphrase = await _syncInteraction.RequestPassphraseAsync(confirm: true);
-        if (passphrase is null)
-            return;
         IsSyncBusy = true;
-        SyncStatus = "ENCRYPTING / UPLOADING…";
+        SyncStatus = "PREPARING ENCRYPTION…";
         try
         {
+            var passphrase = await _gitHubSync.GetPassphraseForPushAsync();
+            if (passphrase is null)
+            {
+                SyncStatus = "PUSH CANCELLED";
+                return;
+            }
+
+            SyncStatus = "ENCRYPTING / UPLOADING…";
             await _gitHubSync.PushAsync(SyncOwner, SyncRepository, SyncBranch, passphrase);
             SyncStatus = "SYNC / PUSH COMPLETE";
             StatusMessage = "GITHUB / CONFIGURATION PUSHED";
