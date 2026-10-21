@@ -79,16 +79,19 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not download the previous $channel release" }
           }
           vpk pack --packId $packId --packTitle OnlyShell --packVersion $env:VERSION --packDir artifacts/publish/self-contained --mainExe OnlyShell.exe --channel $channel --outputDir $output --icon src/OnlyShell.App/Assets/OnlyShell.ico
+          if ($LASTEXITCODE -ne 0) { throw "Velopack packaging failed with exit code $LASTEXITCODE" }
           $setup = (Resolve-Path "$output/$packId-$channel-Setup.exe").Path
           $env:APP_VERSION = $env:VERSION
           $env:VARIANT_NAME = "SelfContained"
           $env:VPK_SETUP_PATH = $setup
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="$env:APP_VERSION" /DVariantName="$env:VARIANT_NAME" /DVpkSetupPath="$env:VPK_SETUP_PATH" installer/OnlyShell.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-          Remove-Item -LiteralPath $setup -Force
           $tag = "v$env:VERSION-self-contained"
           vpk upload github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output --publish --tag $tag --targetCommitish $env:GITHUB_SHA --releaseName "OnlyShell $env:VERSION (Self-contained)"
+          if ($LASTEXITCODE -ne 0) { throw "Velopack upload failed with exit code $LASTEXITCODE" }
           gh release upload $tag "artifacts/setup/OnlyShell-SelfContained-$env:VERSION-Setup.exe" --repo $env:REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload the self-contained Inno Setup installer (exit code $LASTEXITCODE)" }
+          Remove-Item -LiteralPath $setup -Force
 
       - name: Package framework-dependent release
         shell: pwsh
@@ -108,13 +111,16 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not download the previous $channel release" }
           }
           vpk pack --packId $packId --packTitle OnlyShell --packVersion $env:VERSION --packDir artifacts/publish/framework-dependent --mainExe OnlyShell.exe --channel $channel --outputDir $output --icon src/OnlyShell.App/Assets/OnlyShell.ico --framework net10.0-x64-desktop
+          if ($LASTEXITCODE -ne 0) { throw "Velopack packaging failed with exit code $LASTEXITCODE" }
           $setup = (Resolve-Path "$output/$packId-$channel-Setup.exe").Path
           $env:APP_VERSION = $env:VERSION
           $env:VARIANT_NAME = "FrameworkDependent"
           $env:VPK_SETUP_PATH = $setup
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion="$env:APP_VERSION" /DVariantName="$env:VARIANT_NAME" /DVpkSetupPath="$env:VPK_SETUP_PATH" installer/OnlyShell.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-          Remove-Item -LiteralPath $setup -Force
           $tag = "v$env:VERSION-framework-dependent"
           vpk upload github --repoUrl "https://github.com/$env:REPOSITORY" --token $env:GITHUB_TOKEN --channel $channel --outputDir $output --publish --tag $tag --targetCommitish $env:GITHUB_SHA --releaseName "OnlyShell $env:VERSION (.NET Desktop Runtime required)"
+          if ($LASTEXITCODE -ne 0) { throw "Velopack upload failed with exit code $LASTEXITCODE" }
           gh release upload $tag "artifacts/setup/OnlyShell-FrameworkDependent-$env:VERSION-Setup.exe" --repo $env:REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload the framework-dependent Inno Setup installer (exit code $LASTEXITCODE)" }
+          Remove-Item -LiteralPath $setup -Force
