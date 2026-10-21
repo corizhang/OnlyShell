@@ -90,6 +90,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void CheckForUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckForUpdatesButton.IsEnabled = false;
+        CheckForUpdatesButton.Content = "[ 正在检查... ]";
+        try
+        {
+            await ((App)Application.Current).CheckForApplicationUpdatesAsync(manual: true);
+        }
+        finally
+        {
+            CheckForUpdatesButton.IsEnabled = true;
+            CheckForUpdatesButton.Content = "[ 检查更新 ]";
+        }
+    }
+
     private void ChooseScriptFolder_Click(object sender, RoutedEventArgs e)
     {
         try

@@ -24,6 +24,7 @@ namespace OnlyShell.App;
 public partial class App : Application
 {
     private IHost? _applicationHost;
+    private bool _isCheckingForApplicationUpdates;
 
     public static string ProductVersion
     {
@@ -117,26 +118,67 @@ public partial class App : Application
         "OnlyShell",
         "onlyshell.db");
 
-    private static async Task CheckForApplicationUpdatesAsync()
+    internal async Task CheckForApplicationUpdatesAsync(bool manual = false)
     {
+        if (_isCheckingForApplicationUpdates)
+        {
+            if (manual)
+            {
+                ShowUpdateNotice(
+                    "更新检查进行中",
+                    "OnlyShell 正在检查更新，请稍候。",
+                    "知道了");
+            }
+
+            return;
+        }
+
+        _isCheckingForApplicationUpdates = true;
         try
         {
             var manager = new UpdateManager(new GithubSource("https://github.com/corizhang/OnlyShell", null, prerelease: false));
-            if (!manager.IsInstalled || !IsApplicationUpdateCheckDue())
+            if (!manager.IsInstalled)
+            {
+                if (manual)
+                {
+                    ShowUpdateNotice(
+                        "无法应用更新",
+                        "当前运行版本不是通过 OnlyShell 安装程序安装的，无法使用应用内更新。",
+                        "知道了");
+                }
+
+                return;
+            }
+
+            if (!manual && !IsApplicationUpdateCheckDue())
                 return;
 
             var update = await manager.CheckForUpdatesAsync();
             RecordApplicationUpdateCheck();
             if (update is null)
+            {
+                if (manual)
+                {
+                    ShowUpdateNotice(
+                        "已是最新版本",
+                        $"当前版本 {ProductVersion} 已是最新版本。",
+                        "知道了");
+                }
+
                 return;
+            }
 
             var version = update.TargetFullRelease.Version.ToString();
-            var choice = MessageBox.Show(
-                $"发现 OnlyShell 新版本 {version}，是否现在下载并重启完成更新？",
-                "OnlyShell / Update",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Information);
-            if (choice != MessageBoxResult.Yes)
+            var dialog = new ConfirmationDialogWindow(
+                "APPLICATION / UPDATE",
+                "发现可用更新",
+                $"OnlyShell {version} 已发布。现在下载并重启应用以完成更新吗？",
+                "下载并更新",
+                destructive: false)
+            {
+                Owner = MainWindow
+            };
+            if (dialog.ShowDialog() != true)
                 return;
 
             await manager.DownloadUpdatesAsync(update);
@@ -145,7 +187,33 @@ public partial class App : Application
         catch (Exception exception)
         {
             ApplicationDiagnostics.Write("UPDATE", "Could not check for or apply application updates.", exception);
+            if (manual)
+            {
+                ShowUpdateNotice(
+                    "检查更新失败",
+                    $"暂时无法检查更新。请检查网络连接后重试。\n\n{exception.Message}",
+                    "知道了");
+            }
         }
+        finally
+        {
+            _isCheckingForApplicationUpdates = false;
+        }
+    }
+
+    private void ShowUpdateNotice(string heading, string message, string confirmLabel)
+    {
+        var dialog = new ConfirmationDialogWindow(
+            "APPLICATION / UPDATE",
+            heading,
+            message,
+            confirmLabel,
+            destructive: false,
+            showCancel: false)
+        {
+            Owner = MainWindow
+        };
+        dialog.ShowDialog();
     }
 
     private static bool IsApplicationUpdateCheckDue()

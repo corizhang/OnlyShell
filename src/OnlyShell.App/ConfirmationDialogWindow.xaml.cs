@@ -4,13 +4,20 @@ namespace OnlyShell.App;
 
 public partial class ConfirmationDialogWindow : Window
 {
-    public ConfirmationDialogWindow(string eyebrow, string heading, string message, string confirmLabel, bool destructive)
+    public ConfirmationDialogWindow(
+        string eyebrow,
+        string heading,
+        string message,
+        string confirmLabel,
+        bool destructive,
+        bool showCancel = true)
     {
         InitializeComponent();
         EyebrowText.Text = $"// {eyebrow}";
         HeadingText.Text = heading;
         MessageText.Text = message;
         ConfirmButton.Content = confirmLabel;
+        CancelButton.Visibility = showCancel ? Visibility.Visible : Visibility.Collapsed;
         if (destructive)
         {
             ConfirmButton.Background = (System.Windows.Media.Brush)FindResource("Brush.Status.Error");

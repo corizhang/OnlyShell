@@ -200,9 +200,26 @@
                                 <Border Height="1" Background="{DynamicResource Brush.Border.Subtle}" Margin="0,0,0,14" />
                                 <TextBlock Text="// APPLICATION_DIAGNOSTICS" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
                                 <TextBlock Text="应用日志与诊断" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,6,0,10" />
-                                <TextBlock Text="未处理的启动、界面和后台任务异常会记录在本机。导出的诊断包只包含运行环境信息和应用日志，不包含主机数据库、凭据或脚本文件。日志内容仍可能带有主机地址等信息，请检查后再分享。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" TextWrapping="Wrap" MaxWidth="680" />
-                                <TextBlock x:Name="DiagnosticLogPathText" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" TextWrapping="Wrap" Margin="0,12,0,12" />
-                                <Button Content="[ EXPORT DIAGNOSTICS ]" Click="ExportDiagnostics_Click" HorizontalAlignment="Left" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,7" />
+                                <Grid Margin="0,0,0,12" HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                        <TextBlock Text="未处理的启动、界面和后台任务异常会记录在本机。导出的诊断包只包含运行环境信息和应用日志，不包含主机数据库、凭据或脚本文件。日志内容仍可能带有主机地址等信息，请检查后再分享。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" TextWrapping="Wrap" TextAlignment="Left" HorizontalAlignment="Left" MaxWidth="680" />
+                                        <TextBlock x:Name="DiagnosticLogPathText" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" TextWrapping="Wrap" TextAlignment="Left" HorizontalAlignment="Left" Margin="0,12,0,0" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="[ EXPORT DIAGNOSTICS ]" Click="ExportDiagnostics_Click" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16,0,0,0" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,7" />
+                                </Grid>
+                                <Border Height="1" Background="{DynamicResource Brush.Border.Subtle}" Margin="0,18,0,14" />
+                                <TextBlock Text="// ABOUT_ONLYSHELL" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
+                                <TextBlock Text="关于 OnlyShell" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,6,0,10" />
+                                <Grid HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                        <TextBlock Text="OnlyShell" FontSize="{DynamicResource Type.Size.BodyEmphasis}" FontWeight="SemiBold" />
+                                        <TextBlock Text="当前版本" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Label}" Margin="0,4,0,0" />
+                                        <TextBlock Text="{x:Static app:App.ProductVersion}" Foreground="{DynamicResource Brush.Status.Info}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Body}" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                    <Button x:Name="CheckForUpdatesButton" Grid.Column="1" Content="[ 检查更新 ]" Click="CheckForUpdates_Click" VerticalAlignment="Center" HorizontalAlignment="Right" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,7" />
+                                </Grid>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
