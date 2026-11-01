@@ -30,7 +30,14 @@ namespace VirtualTerminal;
 public partial class TerminalControl : Control, IDisposable
 {
     private readonly TerminalRenderer _renderer = new();
-    private readonly TerminalOptions _options = new();
+    // The primary terminal fonts (Cascadia Mono / Consolas / NSimSun) do not
+    // consistently contain emoji and symbol glyphs. Resolve those codepoints
+    // through Windows' emoji and symbol faces while keeping the configured
+    // monospace font responsible for cell metrics and ordinary terminal text.
+    private readonly TerminalOptions _options = new()
+    {
+        FontFallback = ["Segoe UI Emoji", "Segoe UI Symbol"],
+    };
     private TerminalCursorRenderer _cursorRenderer = new DefaultTerminalCursorRenderer();
 
     private readonly object _invalidateLock = new object();

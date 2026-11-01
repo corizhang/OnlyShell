@@ -265,6 +265,52 @@ public partial class MainWindow : Window
             ["Brush.Status.InfoBright"] = "#75F2FF", ["Brush.Status.WarningBright"] = "#FFD36F", ["Brush.Status.SuccessBright"] = "#7AFFA8",
             ["Brush.Accent.Purple"] = "#D3B6FF"
         },
+        "EVA 初号机" => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Brush.Canvas"] = "#100D18", ["Brush.Surface"] = "#171321", ["Brush.Surface.Raised"] = "#211A2E",
+            ["Brush.Surface.Input"] = "#0B0910", ["Brush.Surface.Editor"] = "#08070C", ["Brush.Surface.Terminal"] = "#050407",
+            ["Brush.Surface.Output"] = "#090E08", ["Brush.Surface.Hover"] = "#2A2237", ["Brush.Surface.Selected"] = "#302342",
+            ["Brush.Surface.SelectedHover"] = "#3D2D51", ["Brush.Surface.SelectionQuiet"] = "#221A2D", ["Brush.Surface.HoverSubtle"] = "#1D1725",
+            ["Brush.Surface.ListHover"] = "#211A2B", ["Brush.Surface.Disabled"] = "#18151D", ["Brush.Surface.StatusBar"] = "#120F19",
+            ["Brush.Surface.Warning"] = "#271D0B", ["Brush.Surface.MetricTrack"] = "#292333", ["Brush.Surface.Metric"] = "#0C0A10",
+            ["Brush.Surface.TerminalToolbar"] = "#20192B", ["Brush.Surface.TerminalPopup"] = "#211A2B", ["Brush.Surface.Error"] = "#28171A",
+            ["Brush.Surface.ListRow"] = "#14111C", ["Brush.Surface.ListRowAlt"] = "#191521", ["Brush.Surface.EditorAlt"] = "#0A090F",
+            ["Brush.Border.Subtle"] = "#332A3F", ["Brush.Border.Default"] = "#453951", ["Brush.Border.Strong"] = "#635070",
+            ["Brush.Border.Focus"] = "#A88BFF", ["Brush.Border.Selected"] = "#7652A8", ["Brush.Border.Disabled"] = "#2E2738",
+            ["Brush.Border.Success"] = "#28533A", ["Brush.Border.Warning"] = "#665323", ["Brush.Border.Dialog"] = "#44374F",
+            ["Brush.Border.Error"] = "#8D3E50", ["Brush.Border.MetricsChartGrid"] = "#2E2639", ["Brush.Text.Primary"] = "#F0EAF6",
+            ["Brush.Text.Secondary"] = "#B6A9C5", ["Brush.Text.Disabled"] = "#756B80", ["Brush.Text.OnAccent"] = "#160E20",
+            ["Brush.Text.OnSelected"] = "#EDE3F8", ["Brush.Text.Header"] = "#D8CCE8", ["Brush.Text.Highlight"] = "#FFFFFF",
+            ["Brush.Text.HighEmphasis"] = "#FAF6FF", ["Brush.Text.Tertiary"] = "#9185A0", ["Brush.Text.TerminalDefault"] = "#DDE5F4",
+            ["Brush.Text.TerminalSuccess"] = "#A8FF60", ["Brush.Text.Terminal"] = "#E9E4F0", ["Brush.Icon.Muted"] = "#A79BB8",
+            ["Brush.Accent.Primary"] = "#B48CFF", ["Brush.Accent.Hover"] = "#C5A5FF", ["Brush.Status.Success"] = "#65D980",
+            ["Brush.Status.Info"] = "#A8FF60", ["Brush.Status.Warning"] = "#E8B84A", ["Brush.Status.Error"] = "#FF777E",
+            ["Brush.Status.InfoBright"] = "#C2FF78", ["Brush.Status.WarningBright"] = "#FFD166", ["Brush.Status.SuccessBright"] = "#8BFFA1",
+            ["Brush.Accent.Purple"] = "#D0AEFF"
+        },
+        "EVA 二号机" => new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Brush.Canvas"] = "#160D0E", ["Brush.Surface"] = "#201415", ["Brush.Surface.Raised"] = "#2C1B1D",
+            ["Brush.Surface.Input"] = "#0D090A", ["Brush.Surface.Editor"] = "#0A0708", ["Brush.Surface.Terminal"] = "#050303",
+            ["Brush.Surface.Output"] = "#0A1008", ["Brush.Surface.Hover"] = "#382224", ["Brush.Surface.Selected"] = "#452126",
+            ["Brush.Surface.SelectedHover"] = "#582A2D", ["Brush.Surface.SelectionQuiet"] = "#301B1E", ["Brush.Surface.HoverSubtle"] = "#28191A",
+            ["Brush.Surface.ListHover"] = "#2A1A1C", ["Brush.Surface.Disabled"] = "#1A1314", ["Brush.Surface.StatusBar"] = "#190F11",
+            ["Brush.Surface.Warning"] = "#2A1D0C", ["Brush.Surface.MetricTrack"] = "#382729", ["Brush.Surface.Metric"] = "#0C0808",
+            ["Brush.Surface.TerminalToolbar"] = "#2A191B", ["Brush.Surface.TerminalPopup"] = "#2C1B1D", ["Brush.Surface.Error"] = "#321516",
+            ["Brush.Surface.ListRow"] = "#1A1113", ["Brush.Surface.ListRowAlt"] = "#201517", ["Brush.Surface.EditorAlt"] = "#0D090B",
+            ["Brush.Border.Subtle"] = "#3B282A", ["Brush.Border.Default"] = "#563638", ["Brush.Border.Strong"] = "#754447",
+            ["Brush.Border.Focus"] = "#FF9A4A", ["Brush.Border.Selected"] = "#D2533D", ["Brush.Border.Disabled"] = "#332326",
+            ["Brush.Border.Success"] = "#28533A", ["Brush.Border.Warning"] = "#765021", ["Brush.Border.Dialog"] = "#503236",
+            ["Brush.Border.Error"] = "#A84642", ["Brush.Border.MetricsChartGrid"] = "#38272A", ["Brush.Text.Primary"] = "#F6ECE9",
+            ["Brush.Text.Secondary"] = "#C4AAA6", ["Brush.Text.Disabled"] = "#816E6D", ["Brush.Text.OnAccent"] = "#1B0805",
+            ["Brush.Text.OnSelected"] = "#FFF0E8", ["Brush.Text.Header"] = "#E8D1CA", ["Brush.Text.Highlight"] = "#FFFFFF",
+            ["Brush.Text.HighEmphasis"] = "#FFF8F4", ["Brush.Text.Tertiary"] = "#9C8581", ["Brush.Text.TerminalDefault"] = "#EEE3DF",
+            ["Brush.Text.TerminalSuccess"] = "#A7F078", ["Brush.Text.Terminal"] = "#F0E8E5", ["Brush.Icon.Muted"] = "#B7A09C",
+            ["Brush.Accent.Primary"] = "#FF624C", ["Brush.Accent.Hover"] = "#FF8068", ["Brush.Status.Success"] = "#78D68A",
+            ["Brush.Status.Info"] = "#F2A04A", ["Brush.Status.Warning"] = "#FFB347", ["Brush.Status.Error"] = "#FF746B",
+            ["Brush.Status.InfoBright"] = "#FFC36B", ["Brush.Status.WarningBright"] = "#FFD071", ["Brush.Status.SuccessBright"] = "#9AF0A3",
+            ["Brush.Accent.Purple"] = "#C58AA8"
+        },
         _ => new Dictionary<string, string>(StringComparer.Ordinal)
     };
 

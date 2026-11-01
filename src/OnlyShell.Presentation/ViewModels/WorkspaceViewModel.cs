@@ -100,7 +100,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject
     public IReadOnlyList<string> TerminalFontFamilies { get; } = ["Cascadia Mono", "Consolas", "NSimSun"];
     public IReadOnlyList<double> TerminalFontSizes { get; } = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
     public IReadOnlyList<int> TerminalScrollbackOptions { get; } = [1000, 5000, 10000, 25000, 50000];
-    public IReadOnlyList<string> AppearanceThemes { get; } = ["午夜暗色", "海洋蓝", "高对比"];
+    public IReadOnlyList<string> AppearanceThemes { get; } = ["午夜暗色", "海洋蓝", "高对比", "EVA 初号机", "EVA 二号机"];
     public IReadOnlyList<string> UiFontFamilies { get; } = ["Segoe UI", "Segoe UI Variable Text", "Microsoft YaHei UI", "Arial"];
     public IReadOnlyList<double> UiFontSizes { get; } = [9, 10, 11, 12, 13, 14];
 
