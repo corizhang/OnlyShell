@@ -354,10 +354,13 @@ public partial class TerminalControl : Control, IDisposable
     /// <summary>Copies the current terminal selection to the system clipboard.</summary>
     public void CopySelectionToClipboard()
     {
-        string? text = BuildSelectedText();
+        string? text = GetSelectedText();
         if (!string.IsNullOrEmpty(text))
             Clipboard.SetText(text);
     }
+
+    /// <summary>Returns the currently selected terminal text without changing the selection.</summary>
+    public string? GetSelectedText() => BuildSelectedText();
 
     /// <summary>Pastes clipboard text into the terminal session.</summary>
     public Task PasteFromClipboardAsync() => PasteClipboardTextAsync();
@@ -1317,6 +1320,17 @@ public partial class TerminalControl : Control, IDisposable
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>Returns recent terminal output from scrollback and the visible screen without sending input to the session.</summary>
+    public string GetRecentBufferText()
+    {
+        if (_decoder is null)
+            return string.Empty;
+
+        TerminalScreenBuffer buffer = _decoder.Buffer;
+        lock (buffer.SyncRoot)
+            return buffer.GetAllText();
     }
 
     /// <summary>

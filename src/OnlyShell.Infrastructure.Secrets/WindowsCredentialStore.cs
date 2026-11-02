@@ -6,14 +6,23 @@ using OnlyShell.Core.Secrets;
 
 namespace OnlyShell.Infrastructure.Secrets;
 
-/// <summary>Stores per-host secrets in the signed-in Windows user's Credential Manager.</summary>
-public sealed class WindowsCredentialStore : ICredentialStore
+/// <summary>Stores secrets in the signed-in Windows user's Credential Manager under a dedicated namespace.</summary>
+public sealed class WindowsCredentialStore : ICredentialStore, IAiCredentialStore
 {
     private const uint Generic = 1;
     private const uint LocalMachine = 2;
     private const uint MaximumBlobSize = 2560;
     private const int ErrorNotFound = 1168;
-    private const string TargetPrefix = "OnlyShell/SSH/";
+    private readonly string _targetPrefix;
+    private readonly string _secretKind;
+
+    public WindowsCredentialStore() : this("OnlyShell/SSH/", "SSH") { }
+
+    public WindowsCredentialStore(string targetPrefix, string secretKind = "secret")
+    {
+        _targetPrefix = targetPrefix;
+        _secretKind = secretKind;
+    }
 
     public Task<string> StoreAsync(string credential, CancellationToken cancellationToken = default)
     {
@@ -31,7 +40,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
             var error = Marshal.GetLastWin32Error();
             if (error == ErrorNotFound)
                 return Task.FromResult<string?>(null);
-            throw new Win32Exception(error, "无法从 Windows 凭据管理器读取 SSH 密码。");
+            throw new Win32Exception(error, $"无法从 Windows 凭据管理器读取{_secretKind}凭据。");
         }
 
         try
@@ -64,16 +73,16 @@ public sealed class WindowsCredentialStore : ICredentialStore
         {
             var error = Marshal.GetLastWin32Error();
             if (error != ErrorNotFound)
-                throw new Win32Exception(error, "无法从 Windows 凭据管理器删除 SSH 密码。");
+                throw new Win32Exception(error, $"无法从 Windows 凭据管理器删除{_secretKind}凭据。");
         }
         return Task.CompletedTask;
     }
 
-    private static void Write(string reference, string value)
+    private void Write(string reference, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
         if (bytes.Length > MaximumBlobSize)
-            throw new ArgumentException("SSH 密码超过 Windows 凭据管理器支持的长度。", nameof(value));
+            throw new ArgumentException($"{_secretKind}凭据超过 Windows 凭据管理器支持的长度。", nameof(value));
 
         var blob = Marshal.AllocHGlobal(bytes.Length);
         try
@@ -92,7 +101,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
             };
 
             if (!CredWrite(ref credential, 0))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "无法保存 SSH 密码到 Windows 凭据管理器。");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), $"无法保存{_secretKind}凭据到 Windows 凭据管理器。");
         }
         finally
         {
@@ -103,7 +112,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
         }
     }
 
-    private static string Target(string reference) => TargetPrefix + reference;
+    private string Target(string reference) => _targetPrefix + reference;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NativeCredential

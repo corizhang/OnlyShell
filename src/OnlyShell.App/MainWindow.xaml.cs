@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Xml;
 using System.IO;
 using Microsoft.Win32;
+using Microsoft.Extensions.DependencyInjection;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using ICSharpCode.AvalonEdit;
@@ -17,6 +18,7 @@ namespace OnlyShell.App;
 public partial class MainWindow : Window
 {
     private readonly WorkspaceViewModel _viewModel;
+    private double _aiAssistantWidth = 360;
     private readonly Dictionary<string, Color> _baseThemeColors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _baseTypeSizes = new(StringComparer.Ordinal);
     private static readonly string[] ThemeBrushKeys =
@@ -52,9 +54,102 @@ public partial class MainWindow : Window
         CaptureBaseDesignTokens();
         ApplyAppearancePreferences();
         DiagnosticLogPathText.Text = ApplicationDiagnostics.DirectoryPath;
+        _ = LoadDeepSeekSettingsAsync();
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         ScriptCodeEditor.Text = _viewModel.ScriptContent;
         UpdateScriptEditorHighlighting();
+    }
+
+    public void ShowAiAssistant(TerminalTabViewModel terminalTab, bool explainSelection = false, string? selectedText = null, Func<string>? getRecentOutput = null)
+    {
+        if (!explainSelection
+            && AiAssistantHost.Visibility == Visibility.Visible
+            && ReferenceEquals(AiAssistantPaneView.TargetTerminal, terminalTab))
+        {
+            CloseAiAssistantPanel();
+            return;
+        }
+
+        AiAssistantPaneView.SetContext(terminalTab, explainSelection, selectedText, getRecentOutput);
+        WorkspaceContentColumn.MinWidth = 360;
+        AiAssistantColumn.MinWidth = 280;
+        AiAssistantColumn.Width = new GridLength(Math.Max(280, _aiAssistantWidth));
+        AiAssistantSplitterColumn.Width = new GridLength(5);
+        AiAssistantSplitter.Visibility = Visibility.Visible;
+        AiAssistantHost.Visibility = Visibility.Visible;
+    }
+
+    private void CloseAiAssistantPanel()
+    {
+        if (AiAssistantColumn.ActualWidth >= 280)
+            _aiAssistantWidth = AiAssistantColumn.ActualWidth;
+        AiAssistantHost.Visibility = Visibility.Collapsed;
+        AiAssistantSplitter.Visibility = Visibility.Collapsed;
+        AiAssistantColumn.Width = new GridLength(0);
+        AiAssistantColumn.MinWidth = 0;
+        AiAssistantSplitterColumn.Width = new GridLength(0);
+        WorkspaceContentColumn.MinWidth = 420;
+    }
+
+    private void AiAssistantPane_CloseRequested(object sender, EventArgs e) => CloseAiAssistantPanel();
+
+    private async Task LoadDeepSeekSettingsAsync()
+    {
+        try
+        {
+            var settings = await App.Services.GetRequiredService<AiAssistantSettingsStore>().LoadAsync();
+            DeepSeekModelBox.SelectedIndex = settings.Model == "deepseek-v4-pro" ? 1 : 0;
+            DeepSeekSettingsStatusText.Text = string.IsNullOrWhiteSpace(settings.CredentialReference) ? "尚未配置 API Key" : "API Key 已安全保存";
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("AI_SETTINGS", "Could not load DeepSeek settings.", exception);
+            DeepSeekSettingsStatusText.Text = "读取设置失败";
+        }
+    }
+
+    private async void SaveDeepSeekSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var apiKey = DeepSeekApiKeyBox.Password;
+        var model = (DeepSeekModelBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "deepseek-flash";
+        SaveDeepSeekSettingsButton.IsEnabled = false;
+        try
+        {
+            var store = App.Services.GetRequiredService<AiAssistantSettingsStore>();
+            var current = await store.LoadAsync();
+            if (string.IsNullOrWhiteSpace(apiKey) && string.IsNullOrWhiteSpace(current.CredentialReference))
+            {
+                DeepSeekSettingsStatusText.Text = "请输入 DeepSeek API Key";
+                return;
+            }
+
+            await store.SaveAsync(model, apiKey);
+            DeepSeekApiKeyBox.Clear();
+            DeepSeekSettingsStatusText.Text = "API Key 已安全保存";
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("AI_SETTINGS", "Could not save DeepSeek settings.", exception);
+            DeepSeekSettingsStatusText.Text = "保存失败，请检查凭据管理器";
+        }
+        finally { SaveDeepSeekSettingsButton.IsEnabled = true; }
+    }
+
+    private async void RemoveDeepSeekKey_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ConfirmationDialogWindow("AI_ASSISTANT / DEEPSEEK", "移除 API Key", "移除后，终端 AI 助手将无法请求 DeepSeek，直到重新配置 API Key。", "移除", destructive: true) { Owner = this };
+        if (dialog.ShowDialog() != true)
+            return;
+        try
+        {
+            await App.Services.GetRequiredService<AiAssistantSettingsStore>().RemoveCredentialAsync();
+            DeepSeekSettingsStatusText.Text = "API Key 已移除";
+        }
+        catch (Exception exception)
+        {
+            ApplicationDiagnostics.Write("AI_SETTINGS", "Could not remove the DeepSeek API key.", exception);
+            DeepSeekSettingsStatusText.Text = "移除失败";
+        }
     }
 
     private void ExportDiagnostics_Click(object sender, RoutedEventArgs e)

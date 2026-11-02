@@ -105,8 +105,11 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="252" MinWidth="190" MaxWidth="420"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*" MinWidth="420"/></Grid.ColumnDefinitions>
+        <Grid Grid.Row="1" x:Name="MainWorkspaceShell">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="54"/><ColumnDefinition Width="252" MinWidth="190" MaxWidth="420"/><ColumnDefinition Width="5"/><ColumnDefinition x:Name="WorkspaceContentColumn" Width="*" MinWidth="360"/>
+                <ColumnDefinition x:Name="AiAssistantSplitterColumn" Width="0" MinWidth="0"/><ColumnDefinition x:Name="AiAssistantColumn" Width="0" MinWidth="0" MaxWidth="520"/>
+            </Grid.ColumnDefinitions>
 
             <!-- Activity rail -->
             <Border Background="{DynamicResource Brush.Surface.StatusBar}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="0,0,1,0">
@@ -197,6 +200,23 @@
                                     <CheckBox Grid.Row="6" Grid.Column="1" IsChecked="{Binding ConfirmMultiLinePaste, Mode=TwoWay}" VerticalAlignment="Center" Content="显示确认提示" Foreground="{DynamicResource Brush.Text.Primary}" />
                                 </Grid>
                                 <Button Content="[ 恢复默认外观 ]" Command="{Binding ResetAppearanceCommand}" HorizontalAlignment="Left" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,6" Margin="0,0,0,16" />
+                                <Border Height="1" Background="{DynamicResource Brush.Border.Subtle}" Margin="0,0,0,14" />
+                                <TextBlock Text="// AI_ASSISTANT / DEEPSEEK" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
+                                <TextBlock Text="终端 AI 助手" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,6,0,4" />
+                                <TextBlock Text="使用 DeepSeek 生成命令或解释选中的终端内容。请求由你主动发起，建议只会展示、复制或插入终端，不会自动执行。API Key 保存在当前 Windows 用户的凭据管理器，不会同步。" Foreground="{DynamicResource Brush.Text.Secondary}" FontSize="{DynamicResource Type.Size.Body}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="360"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="DeepSeek 模型" Foreground="{DynamicResource Brush.Text.Primary}" VerticalAlignment="Center" Margin="0,0,10,9" />
+                                    <ComboBox x:Name="DeepSeekModelBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,9" Padding="{StaticResource Space.Input.Padding}" SelectedIndex="0"><ComboBoxItem Content="deepseek-flash"/><ComboBoxItem Content="deepseek-v4-pro"/></ComboBox>
+                                    <TextBlock Grid.Row="1" Text="API Key" Foreground="{DynamicResource Brush.Text.Primary}" VerticalAlignment="Center" Margin="0,0,10,9" />
+                                    <PasswordBox x:Name="DeepSeekApiKeyBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,9" Padding="{StaticResource Space.Input.Padding}" />
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                        <Button x:Name="SaveDeepSeekSettingsButton" Content="[ 保存设置 ]" Click="SaveDeepSeekSettings_Click" Background="{DynamicResource Brush.Accent.Primary}" Foreground="{DynamicResource Brush.Text.OnAccent}" BorderThickness="0" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,6" Margin="0,0,8,0" />
+                                        <Button Content="[ 移除 API Key ]" Click="RemoveDeepSeekKey_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Error}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Label}" Padding="10,6" />
+                                        <TextBlock x:Name="DeepSeekSettingsStatusText" Foreground="{DynamicResource Brush.Text.Secondary}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                    </StackPanel>
+                                </Grid>
                                 <Border Height="1" Background="{DynamicResource Brush.Border.Subtle}" Margin="0,0,0,14" />
                                 <TextBlock Text="// APPLICATION_DIAGNOSTICS" Foreground="{DynamicResource Brush.Accent.Primary}" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Small}" />
                                 <TextBlock Text="应用日志与诊断" FontSize="{DynamicResource Type.Size.Heading}" FontWeight="SemiBold" Margin="0,6,0,10" />
@@ -547,6 +567,10 @@
                     <controls:SftpWorkspaceView Visibility="{Binding IsSftpWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </Grid>
             </Grid>
+            <GridSplitter x:Name="AiAssistantSplitter" Grid.Column="4" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" ShowsPreview="False" Cursor="SizeWE" Background="{DynamicResource Brush.Border.Subtle}" Visibility="Collapsed" ToolTip="拖动调整 AI 助手宽度" />
+            <Border x:Name="AiAssistantHost" Grid.Column="5" Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1,0,0,0" Visibility="Collapsed" MinWidth="0">
+                <controls:AiAssistantPane x:Name="AiAssistantPaneView" CloseRequested="AiAssistantPane_CloseRequested" />
+            </Border>
         </Grid>
 
         <Border Grid.Row="2" Background="{DynamicResource Brush.Surface.StatusBar}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="0,1,0,0">

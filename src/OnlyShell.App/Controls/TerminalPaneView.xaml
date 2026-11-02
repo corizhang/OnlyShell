@@ -78,6 +78,7 @@
                     <Button x:Name="GitMenuButton" Content="[ GIT ▾ ]" Width="82" Height="26" Margin="0,0,4,0" Click="GitMenuButton_Click" IsEnabled="{Binding IsConnected}" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" Padding="3,3" ToolTip="更多 Git 操作；命令发送到当前终端"/>
                     <Button Content="[ QUICK CMD ]" Width="112" Height="26" Margin="0,0,4,0" Click="QuickCommands_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" Padding="3,3" ToolTip="管理并插入快捷命令；不会自动执行"/>
                     <Button Content="[ FIND ]" Width="72" Height="26" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" Padding="3,3" ToolTip="搜索当前终端屏幕和滚屏缓冲区；按 Enter 查找下一个 (Ctrl+F)"/>
+                    <Button Content="[ AI ]" Width="62" Height="26" Margin="4,0,0,0" Click="AiAssistant_Click" Background="Transparent" Foreground="{DynamicResource Brush.Status.Info}" BorderBrush="{DynamicResource Brush.Border.Subtle}" BorderThickness="1" FontFamily="{DynamicResource Font.Mono}" FontSize="{DynamicResource Type.Size.Caption}" Padding="3,3" ToolTip="使用 DeepSeek 生成终端命令；不会自动执行"/>
                 </StackPanel>
             </Border>
         </Grid>
@@ -88,6 +89,7 @@
                     <Button Click="CopySelection_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="复制选中内容"><StackPanel Orientation="Horizontal"><TextBlock Text="复制"/><TextBlock Text="  Ctrl+Shift+C" Foreground="{DynamicResource Brush.Text.Secondary}" Margin="6,0,0,0"/></StackPanel></Button>
                     <Button Click="PasteFromToolbar_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="粘贴剪贴板内容"><StackPanel Orientation="Horizontal"><TextBlock Text="粘贴"/><TextBlock Text="  Ctrl+Shift+V" Foreground="{DynamicResource Brush.Text.Secondary}" Margin="6,0,0,0"/></StackPanel></Button>
                     <Button Content="查找" Click="OpenSearch_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="查找终端内容 (Ctrl+F)" />
+                    <Button Content="AI 解释" Click="ExplainSelection_Click" Background="Transparent" Foreground="{DynamicResource Brush.Text.Primary}" BorderThickness="0" Padding="8,4" FontSize="{DynamicResource Type.Size.Small}" ToolTip="将选中内容发送给 DeepSeek 解释" />
                 </StackPanel>
             </Border>
         </Popup>

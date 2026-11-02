@@ -649,6 +649,9 @@
         <member name="M:VirtualTerminal.TerminalControl.CopySelectionToClipboard">
             <summary>Copies the current terminal selection to the system clipboard.</summary>
         </member>
+        <member name="M:VirtualTerminal.TerminalControl.GetSelectedText">
+            <summary>Returns the currently selected terminal text without changing the selection.</summary>
+        </member>
         <member name="M:VirtualTerminal.TerminalControl.PasteFromClipboardAsync">
             <summary>Pastes clipboard text into the terminal session.</summary>
         </member>
@@ -709,6 +712,9 @@
             alternate buffer), one row per line, reading under the buffer lock. Used by
             the host to search for sentinels (e.g., the pending question marker).
             </summary>
+        </member>
+        <member name="M:VirtualTerminal.TerminalControl.GetRecentBufferText">
+            <summary>Returns recent terminal output from scrollback and the visible screen without sending input to the session.</summary>
         </member>
         <member name="M:VirtualTerminal.TerminalControl.GetAccessibleText">
             <summary>

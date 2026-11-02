@@ -25,6 +25,7 @@ public partial class App : Application
 {
     private IHost? _applicationHost;
     private bool _isCheckingForApplicationUpdates;
+    public static IServiceProvider Services { get; private set; } = null!;
 
     public static string ProductVersion
     {
@@ -55,6 +56,9 @@ public partial class App : Application
             builder.Services.AddSingleton<IHostRepository>(provider => provider.GetRequiredService<SqliteHostRepository>());
             builder.Services.AddSingleton<IKnownHostRepository>(_ => new SqliteKnownHostRepository(GetDatabasePath()));
             builder.Services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
+            builder.Services.AddSingleton<IAiCredentialStore>(_ => new WindowsCredentialStore("OnlyShell/AI/", "DeepSeek API Key"));
+            builder.Services.AddSingleton<AiAssistantSettingsStore>();
+            builder.Services.AddSingleton<DeepSeekAssistantService>();
             builder.Services.AddSingleton<IScriptExecutionInputsStore, WindowsProtectedScriptInputsStore>();
             builder.Services.AddSingleton<ISshTerminalConnector, SshTerminalConnector>();
             builder.Services.AddSingleton<ILocalTerminalConnector, LocalTerminalConnector>();
@@ -74,6 +78,7 @@ public partial class App : Application
             builder.Services.AddSingleton<WorkspaceViewModel>();
             builder.Services.AddTransient<MainWindow>();
             _applicationHost = builder.Build();
+            Services = _applicationHost.Services;
 
             await _applicationHost.Services.GetRequiredService<SqliteHostRepository>().InitializeAsync();
             await _applicationHost.Services.GetRequiredService<WorkspaceViewModel>().LoadAsync();

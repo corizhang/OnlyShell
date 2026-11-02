@@ -10,6 +10,7 @@ namespace OnlyShell.App;
 public partial class QuickCommandsWindow : Window
 {
     private readonly TerminalTabViewModel _terminalTab;
+    private readonly QuickCommandDefinition? _initialDraft;
     private readonly JsonQuickCommandStore _store = new();
     private readonly ObservableCollection<QuickCommandDefinition> _commands = [];
     private readonly ObservableCollection<QuickCommandVariable> _variables = [];
@@ -38,10 +39,11 @@ public partial class QuickCommandsWindow : Window
         public List<CommandTreeNode> Children { get; } = [];
     }
 
-    public QuickCommandsWindow(TerminalTabViewModel terminalTab)
+    public QuickCommandsWindow(TerminalTabViewModel terminalTab, QuickCommandDefinition? initialDraft = null)
     {
         InitializeComponent();
         _terminalTab = terminalTab;
+        _initialDraft = initialDraft;
         CommandsList.ItemsSource = _visibleCommandNodes;
         VariablesGrid.ItemsSource = _variables;
         Loaded += async (_, _) => await LoadCommandsAsync();
@@ -60,6 +62,16 @@ public partial class QuickCommandsWindow : Window
             StatusText.Text = $"{_commands.Count} SAVED COMMANDS · LOCAL ONLY";
             if (_commands.Count > 0)
                 CommandsList.SelectedItem = _visibleCommandNodes.FirstOrDefault(node => node.Command is not null);
+            if (_initialDraft is not null)
+            {
+                NewCommand_Click(this, new RoutedEventArgs());
+                NameBox.Text = _initialDraft.Name;
+                _folderPath = _initialDraft.FolderPath;
+                UpdateFolderPathText();
+                DescriptionBox.Text = _initialDraft.Description;
+                CommandBox.Text = _initialDraft.Command;
+                StatusText.Text = "AI DRAFT · REVIEW DETAILS AND SAVE";
+            }
         }
         catch (Exception exception)
         {

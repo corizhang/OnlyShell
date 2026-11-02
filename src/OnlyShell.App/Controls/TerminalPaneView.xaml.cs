@@ -182,6 +182,24 @@ public partial class TerminalPaneView : UserControl
         Terminal.Focus();
     }
 
+    private void AiAssistant_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not TerminalTabViewModel terminalTab)
+            return;
+        if (Window.GetWindow(this) is MainWindow mainWindow)
+            mainWindow.ShowAiAssistant(terminalTab, selectedText: Terminal.GetSelectedText(), getRecentOutput: () => Terminal.GetRecentBufferText());
+    }
+
+    private void ExplainSelection_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedText = Terminal.GetSelectedText();
+        SelectionToolbarPopup.IsOpen = false;
+        if (DataContext is not TerminalTabViewModel terminalTab || string.IsNullOrWhiteSpace(selectedText))
+            return;
+        if (Window.GetWindow(this) is MainWindow mainWindow)
+            mainWindow.ShowAiAssistant(terminalTab, explainSelection: true, selectedText, () => Terminal.GetRecentBufferText());
+    }
+
     private void CloseSearch()
     {
         SearchBar.Visibility = System.Windows.Visibility.Collapsed;

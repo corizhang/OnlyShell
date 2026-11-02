@@ -173,7 +173,7 @@
     <sys:Double x:Key="Control.ScriptInput.LabelColumnWidth">150</sys:Double>
     <sys:Double x:Key="Control.ScriptInput.ValueMinWidth">100</sys:Double>
     <sys:Double x:Key="Control.ScriptInput.RemoveButtonWidth">26</sys:Double>
-    <sys:Double x:Key="Control.Terminal.SelectionToolbar.Width">280</sys:Double>
+    <sys:Double x:Key="Control.Terminal.SelectionToolbar.Width">380</sys:Double>
     <sys:Double x:Key="Control.Terminal.SelectionToolbar.Height">38</sys:Double>
     <sys:Double x:Key="Dialog.Width.Connection">560</sys:Double>
     <sys:Double x:Key="Dialog.MinWidth.Connection">520</sys:Double>
