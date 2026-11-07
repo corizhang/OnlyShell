@@ -64,7 +64,7 @@
                     <MenuItem Header="粘贴    Ctrl+Shift+V" Command="{x:Static vt:TerminalControl.PasteCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <Separator />
                     <MenuItem Header="查找    Ctrl+F" Click="TerminalContextFind_Click" />
-                    <MenuItem Header="全选" Command="{x:Static vt:TerminalControl.SelectAllCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <MenuItem Header="全选终端内容（含滚屏缓冲）" Command="{x:Static vt:TerminalControl.SelectAllCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                     <MenuItem Header="清屏" Command="{x:Static vt:TerminalControl.ClearCommand}" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                 </ContextMenu>
             </vt:TerminalControl.ContextMenu>

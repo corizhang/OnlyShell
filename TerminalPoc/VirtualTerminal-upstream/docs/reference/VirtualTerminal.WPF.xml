@@ -644,7 +644,7 @@
             <inheritdoc />
         </member>
         <member name="M:VirtualTerminal.TerminalControl.SelectAll">
-            <summary>Selects the entire visible screen.</summary>
+            <summary>Selects the complete scrollback buffer and visible screen.</summary>
         </member>
         <member name="M:VirtualTerminal.TerminalControl.CopySelectionToClipboard">
             <summary>Copies the current terminal selection to the system clipboard.</summary>

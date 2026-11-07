@@ -55,6 +55,9 @@ public partial class TerminalControl : Control, IDisposable
     private TerminalSelection? _selection;
     private bool _isSelecting = false;
     private Point _selectStart = new Point(0, 0);
+    private Point _lastSelectionPointer;
+    private int _selectionAutoScrollDirection;
+    private readonly DispatcherTimer _selectionAutoScrollTimer;
 
     // When the running app has enabled xterm mouse tracking (e.g. claude in fullscreen
     // mode), mouse events are forwarded to it instead of being used for local selection
@@ -88,7 +91,7 @@ public partial class TerminalControl : Control, IDisposable
     /// <summary>Pastes the clipboard content into the session.</summary>
     public static readonly RoutedUICommand PasteCommand = new RoutedUICommand("Paste", "Paste", typeof(TerminalControl));
 
-    /// <summary>Selects the whole visible screen.</summary>
+    /// <summary>Selects the complete scrollback buffer and visible screen.</summary>
     public static readonly RoutedUICommand SelectAllCommand = new RoutedUICommand("Select All", "SelectAll", typeof(TerminalControl));
 
     /// <summary>Clears the terminal screen and scrollback.</summary>
@@ -233,6 +236,7 @@ public partial class TerminalControl : Control, IDisposable
         Debug.WriteLine($"[{GetType().Name}] Constructor");
         _renderTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Background, DispatcherRenderHandler, Dispatcher);
         _resizeTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(150), DispatcherPriority.Background, (s, e) => { _resizeTimer!.Stop(); ResizeSessionToBounds(); }, Dispatcher);
+        _selectionAutoScrollTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(55), DispatcherPriority.Input, SelectionAutoScroll_Tick, Dispatcher);
 
         Focusable = true;
         Loaded += OnControlLoaded;
@@ -339,13 +343,25 @@ public partial class TerminalControl : Control, IDisposable
     private void InvalidateCommandState()
         => CommandManager.InvalidateRequerySuggested();
 
-    /// <summary>Selects the entire visible screen.</summary>
+    /// <summary>Selects the complete scrollback buffer and visible screen.</summary>
     public void SelectAll()
     {
         if (_decoder is null)
             return;
 
-        _selection = new TerminalSelection(0, 0, _decoder.Buffer.Columns - 1, _decoder.Buffer.Rows - 1);
+        var buffer = _decoder.Buffer;
+        int scrollbackCount;
+        int columns;
+        int rows;
+        lock (buffer.SyncRoot)
+        {
+            scrollbackCount = buffer.IsAlternate ? 0 : buffer.ScrollbackCount;
+            columns = buffer.Columns;
+            rows = buffer.Rows;
+        }
+        _selection = new TerminalSelection(0, 0, columns - 1, scrollbackCount + rows - 1);
+        _scrollOffset = scrollbackCount;
+        UpdateScrollDownVisibility();
         InvalidateCommandState();
         InvalidateVisual();
         RaiseSelectionStateChanged(completed: true, new Point(ActualWidth / 2, ActualHeight / 2));
@@ -509,18 +525,30 @@ public partial class TerminalControl : Control, IDisposable
             return;
 
         TerminalScreenBuffer buf = _decoder.Buffer;
-        IReadOnlyList<TerminalRow>? scrollback = _scrollOffset > 0 ? buf.GetScrollback() : null;
+        IReadOnlyList<TerminalRow>? scrollback = _scrollOffset > 0 || _selection is not null ? buf.GetScrollback() : null;
 
         int rows = buf.Rows;
+        int scrollbackCount = buf.IsAlternate ? 0 : buf.ScrollbackCount;
+        int viewportTop = scrollbackCount - _scrollOffset;
         Size cell = _renderer.CellSize;
         float pixelsPerDip = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+        TerminalSelection? viewportSelection = null;
+        if (_selection is { } selection && selection.EndY >= viewportTop && selection.StartY < viewportTop + rows)
+        {
+            int startY = Math.Max(selection.StartY, viewportTop);
+            int endY = Math.Min(selection.EndY, viewportTop + rows - 1);
+            int startX = selection.StartY < viewportTop ? 0 : selection.StartX;
+            int endX = selection.EndY >= viewportTop + rows ? buf.Columns - 1 : selection.EndX;
+            viewportSelection = new TerminalSelection(startX, startY - viewportTop, endX, endY - viewportTop);
+        }
 
         for (int y = 0; y < rows; y++)
         {
             drawingContext.PushTransform(new TranslateTransform(0, y * cell.Height));
             Span<TerminalCellInfo> cells = GetRowCells(buf, scrollback, y);
 
-            _renderer.RenderRow(drawingContext, cells, _selection, y, pixelsPerDip);
+            _renderer.RenderRow(drawingContext, cells, viewportSelection, y, pixelsPerDip);
             drawingContext.Pop();
         }
 
@@ -1016,8 +1044,10 @@ public partial class TerminalControl : Control, IDisposable
                 return;
 
             _isSelecting = true;
-            _selectStart = p;
-            _selection = new TerminalSelection((int)p.X, (int)p.Y, (int)p.X, (int)p.Y);
+            _lastSelectionPointer = e.GetPosition(this);
+            Point bufferPosition = GetBufferPosition(p);
+            _selectStart = bufferPosition;
+            _selection = new TerminalSelection((int)bufferPosition.X, (int)bufferPosition.Y, (int)bufferPosition.X, (int)bufferPosition.Y);
             CaptureMouse();
             InvalidateCommandState();
             InvalidateVisual();
@@ -1057,11 +1087,14 @@ public partial class TerminalControl : Control, IDisposable
         if (!_isSelecting)
             return;
 
+        _lastSelectionPointer = e.GetPosition(this);
+        UpdateSelectionAutoScroll();
         Point p = GetCellPosition(e);
         if (p.X < 0)
             return;
 
-        _selection = new TerminalSelection((int)_selectStart.X, (int)_selectStart.Y, (int)p.X, (int)p.Y);
+        Point bufferPosition = GetBufferPosition(p);
+        _selection = new TerminalSelection((int)_selectStart.X, (int)_selectStart.Y, (int)bufferPosition.X, (int)bufferPosition.Y);
         InvalidateCommandState();
         InvalidateVisual();
     }
@@ -1091,6 +1124,8 @@ public partial class TerminalControl : Control, IDisposable
             return;
 
         _isSelecting = false;
+        _selectionAutoScrollTimer.Stop();
+        _selectionAutoScrollDirection = 0;
         ReleaseMouseCapture();
 
         if (_selection is { } sel && (sel.StartY != sel.EndY || sel.StartX != sel.EndX))
@@ -1187,6 +1222,9 @@ public partial class TerminalControl : Control, IDisposable
         => ScrollToBottom();
 
     private Point GetCellPosition(MouseEventArgs e)
+        => GetCellPosition(e.GetPosition(this));
+
+    private Point GetCellPosition(Point pt)
     {
         if (_decoder is null || !_rendererConfigured)
             return new Point(-1, -1);
@@ -1195,13 +1233,67 @@ public partial class TerminalControl : Control, IDisposable
         if (cell.Width <= 0 || cell.Height <= 0)
             return new Point(-1, -1);
 
-        Point pt = e.GetPosition(this);
         double x = (pt.X - Padding.Left) / cell.Width;
         double y = (pt.Y - Padding.Top) / cell.Height;
 
         int col = (int)Math.Clamp(Math.Floor(x), 0, _decoder.Buffer.Columns - 1);
         int row = (int)Math.Clamp(Math.Floor(y), 0, _decoder.Buffer.Rows - 1);
         return new Point(col, row);
+    }
+
+    private Point GetBufferPosition(Point viewportPosition)
+    {
+        if (_decoder is null)
+            return viewportPosition;
+
+        TerminalScreenBuffer buffer = _decoder.Buffer;
+        int viewportTop;
+        lock (buffer.SyncRoot)
+            viewportTop = (buffer.IsAlternate ? 0 : buffer.ScrollbackCount) - _scrollOffset;
+        return new Point(viewportPosition.X, viewportTop + viewportPosition.Y);
+    }
+
+    private void UpdateSelectionAutoScroll()
+    {
+        if (_decoder is null || !_rendererConfigured)
+            return;
+
+        double cellHeight = _renderer.CellSize.Height;
+        if (cellHeight <= 0)
+            return;
+
+        double topEdge = Padding.Top + cellHeight;
+        double bottomEdge = ActualHeight - Padding.Bottom - cellHeight;
+        _selectionAutoScrollDirection = _lastSelectionPointer.Y < topEdge
+            ? 1
+            : _lastSelectionPointer.Y > bottomEdge ? -1 : 0;
+
+        if (_selectionAutoScrollDirection == 0)
+            _selectionAutoScrollTimer.Stop();
+        else if (!_selectionAutoScrollTimer.IsEnabled)
+            _selectionAutoScrollTimer.Start();
+    }
+
+    private void SelectionAutoScroll_Tick(object? sender, EventArgs e)
+    {
+        if (!_isSelecting || _decoder is null || _selectionAutoScrollDirection == 0)
+        {
+            _selectionAutoScrollTimer.Stop();
+            return;
+        }
+
+        int previousOffset = _scrollOffset;
+        ScrollBy(_selectionAutoScrollDirection * 2);
+        if (previousOffset == _scrollOffset)
+        {
+            _selectionAutoScrollTimer.Stop();
+            return;
+        }
+
+        Point cell = GetCellPosition(_lastSelectionPointer);
+        Point bufferPosition = GetBufferPosition(cell);
+        _selection = new TerminalSelection((int)_selectStart.X, (int)_selectStart.Y, (int)bufferPosition.X, (int)bufferPosition.Y);
+        InvalidateVisual();
     }
 
     private string? BuildSelectedText()
@@ -1211,26 +1303,31 @@ public partial class TerminalControl : Control, IDisposable
 
         StringBuilder builder = new();
         TerminalScreenBuffer buffer = _decoder.Buffer;
-        IReadOnlyList<TerminalRow>? scrollback = _scrollOffset > 0 ? buffer.GetScrollback() : null;
-
-        for (int y = sel.StartY; y <= sel.EndY; y++)
+        lock (buffer.SyncRoot)
         {
-            if (y < 0 || y >= buffer.Rows)
-                continue;
+            IReadOnlyList<TerminalRow>? scrollback = buffer.IsAlternate ? null : buffer.GetScrollback();
+            int rowCount = (scrollback?.Count ?? 0) + buffer.Rows;
+            int startY = Math.Max(0, sel.StartY);
+            int endY = Math.Min(rowCount - 1, sel.EndY);
 
-            int x0 = y == sel.StartY ? sel.StartX : 0;
-            int x1 = y == sel.EndY ? sel.EndX : buffer.Columns - 1;
-            Span<TerminalCellInfo> row = GetRowCells(buffer, scrollback, y);
-
-            for (int x = x0; x <= x1 && x < row.Length; x++)
+            for (int y = startY; y <= endY; y++)
             {
-                if (row[x].Style.Continuation)
-                    continue;
+                int x0 = y == sel.StartY ? sel.StartX : 0;
+                int x1 = y == sel.EndY ? sel.EndX : buffer.Columns - 1;
+                Span<TerminalCellInfo> row = y < (scrollback?.Count ?? 0)
+                    ? scrollback![y].AsSpan()
+                    : buffer.GetRow(y - (scrollback?.Count ?? 0));
 
-                builder.Append(row[x].Character.ToString());
+                for (int x = Math.Max(0, x0); x <= x1 && x < row.Length; x++)
+                {
+                    if (row[x].Style.Continuation)
+                        continue;
+
+                    builder.Append(row[x].Character.ToString());
+                }
+
+                builder.Append('\n');
             }
-
-            builder.Append('\n');
         }
 
         return builder.Length > 0
